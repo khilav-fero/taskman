@@ -1,17 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
-
-class TaskLifecycleStage(models.TextChoices):
-    TO_DO = 'TODO', 'To-Do'
-    IN_PROGRESS = 'INPROGRESS', 'In-Progress'
-    CODE_REVIEW = 'REVIEW', 'Code Review'
-    DONE = 'DONE', 'Done'
-
-class TaskPriority(models.IntegerChoices):
-    LOW = 1, 'Low'
-    MEDIUM = 2, 'Medium'
-    HIGH = 3, 'High'
-    URGENT = 4, 'Urgent'
+#choices from lib
+from lib.choices import TaskLifecycleStage, TaskPriority
 
 class Task(models.Model):
     title = models.CharField(max_length=200)
@@ -32,11 +22,5 @@ class Comment(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='comments')
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        short_text = (self.text[:75] + '...') if len(self.text) > 75 else self.text
-        return f"Comment by {self.author.username} on '{self.task.title}': {short_text}"
-
-    class Meta:
-        ordering = ['created_at'] # Showing oldest comments first
-
+    def __str__(self): short_text = (self.text[:75] + '...') if len(self.text) > 75 else self.text; return f"Comment by {self.author.username} on '{self.task.title}': {short_text}"
+    class Meta: ordering = ['created_at']

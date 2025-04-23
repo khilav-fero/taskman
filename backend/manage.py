@@ -3,15 +3,10 @@
 import os
 import sys
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), 'backend', 'apps'))
-
-
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'taskman.settings')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
