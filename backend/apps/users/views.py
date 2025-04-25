@@ -11,7 +11,7 @@ from lib.choices import Role
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
-    permission_classes = [permissions.AllowAny] # Allow anyone to register
+    permission_classes = [permissions.AllowAny] 
     serializer_class = RegisterSerializer
 
 class CustomAuthToken(ObtainAuthToken):
@@ -21,7 +21,7 @@ class CustomAuthToken(ObtainAuthToken):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
         token, created = Token.objects.get_or_create(user=user)
-        user_serializer = UserSerializer(user, context={'request': request}) # Use UserSerializer
+        user_serializer = UserSerializer(user, context={'request': request}) 
         return Response({'token': token.key, 'user': user_serializer.data})
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
@@ -33,24 +33,22 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         """ Dynamic permissions based on action """
         if self.action == 'list': permission_classes = [IsAdminOrManagerUser]
         elif self.action == 'retrieve': permission_classes = [permissions.IsAuthenticated]
-        elif self.action in ['update_role']: permission_classes = [IsAdminUser] # Permission for custom action
-        else: permission_classes = [permissions.IsAdminUser] # Default restrict other actions
+        elif self.action in ['update_role']: permission_classes = [IsAdminUser] 
+        else: permission_classes = [permissions.IsAdminUser] 
         return [permission() for permission in permission_classes]
 
     @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser], url_path='update-role')
     def update_role(self, request, pk=None):
         """ Custom action for Admins to update user roles """
-        user = self.get_object() # Gets user by pk, handles 404
+        user = self.get_object() 
         new_role = request.data.get('role')
         if not new_role or new_role not in Role.values:
             return Response({'error': f'Valid role required: {Role.values}'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            # Ensure profile exists before trying to update
             profile, created = Profile.objects.get_or_create(user=user)
             profile.role = new_role
             profile.save()
-            serializer = ProfileSerializer(profile) # Return updated profile data
+            serializer = ProfileSerializer(profile) 
             return Response(serializer.data)
-        except Exception as e: # Catch potential unexpected errors
-            # Log the error e for debugging
+        except Exception as e: 
             return Response({'error': 'An unexpected error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

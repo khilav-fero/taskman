@@ -2,54 +2,63 @@ from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+# get_object_or_404 used for returning a clean http404 instead of the default does not exist 
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 from rest_framework.exceptions import PermissionDenied
-from .models import Task, Comment
-from .serializers import TaskSerializer, CommentSerializer
+
+from .models import Task, TaskHistory
+from .serializers import TaskSerializer, TaskHistorySerializer
 from apps.users.permissions import (
     IsAdminOrManagerUser,
-    IsOwnerOrAdminOrManager,
-    IsCommentAuthorOrAdminOrManager
+    IsOwnerOrAdminOrManager
 )
 
+
 class TaskViewSet(viewsets.ModelViewSet):
-    """ API endpoint for Tasks CRUD and custom actions """
     queryset = Task.objects.all().select_related(
         'assignee__profile', 'creator__profile'
     ).prefetch_related(
-        'collaborators__profile' 
+        'collaborators__profile'
     ).order_by('-priority', '-created_at')
     serializer_class = TaskSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'priority', 'assignee', 'creator', 'deadline']
     search_fields = ['title', 'description']
-    ordering_fields = ['created_at', 'updated_at', 'deadline', 'priority', 'status', 'title']
+    ordering_fields = [
+        'created_at', 'updated_at', 'deadline', 'priority', 'status', 'title'
+    ]
 
     def get_permissions(self):
-        """ Set permissions based on action """
-        if self.action == 'create': permission_classes = [IsAdminOrManagerUser]
-        elif self.action in ['update', 'partial_update', 'destroy', 'assign', 'manage_collaborators']:
+        if self.action == 'create':
+            permission_classes = [IsAdminOrManagerUser]
+        elif self.action in [
+            'update', 'partial_update', 'destroy',
+            'assign', 'manage_collaborators'
+        ]:
             permission_classes = [IsOwnerOrAdminOrManager]
-        else: 
+        else:
             permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer):
-        """ Save task (creator is set in serializer context) """
         serializer.save()
 
     def perform_update(self, serializer):
-        """ Save updated task """
         serializer.save()
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAdminOrManagerUser], url_path='assign')
+    @action(
+        detail=True, methods=['post'],
+        permission_classes=[IsAdminOrManagerUser], url_path='assign'
+    )
     def assign(self, request, pk=None):
-        """ Assigns/reassigns task """
-        task = self.get_object() 
+        task = self.get_object()
         assignee_id = request.data.get('assignee_id')
         if assignee_id is None:
-             return Response({'error': 'assignee_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'assignee_id required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         try:
             assignee = User.objects.get(pk=assignee_id)
             task.assignee = assignee
@@ -57,54 +66,59 @@ class TaskViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(task)
             return Response(serializer.data)
         except User.DoesNotExist:
-            return Response({'error': f'User with ID {assignee_id} not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': f'User ID {assignee_id} not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-
-    @action(detail=True, methods=['post', 'delete'], permission_classes=[IsAdminOrManagerUser], url_path='collaborators/(?P<user_pk>[^/.]+)')
+    @action(
+        detail=True, methods=['post', 'delete'],
+        permission_classes=[IsAdminOrManagerUser],
+        url_path='collaborators/(?P<user_pk>[^/.]+)'
+    )
     def manage_collaborators(self, request, pk=None, user_pk=None):
-        """ Adds (POST) or removes (DELETE) a collaborator """
-        task = self.get_object() 
+        task = self.get_object()
         try:
             user_to_manage = User.objects.get(pk=user_pk)
         except User.DoesNotExist:
-            return Response({'error': f'User with ID {user_pk} not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': f'User ID {user_pk} not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         if request.method == 'POST':
             if user_to_manage in task.collaborators.all():
-                 return Response({'warning': f'User {user_to_manage.username} is already a collaborator.'}, status=status.HTTP_200_OK)
+                return Response(
+                    {'warning': 'User already collaborator.'},
+                    status=status.HTTP_200_OK
+                )
             task.collaborators.add(user_to_manage)
-            return Response({'status': f'User {user_to_manage.username} added as collaborator.'}, status=status.HTTP_200_OK)
-
+            return Response(
+                {'status': 'Collaborator added.'},
+                status=status.HTTP_200_OK
+            )
         elif request.method == 'DELETE':
             if user_to_manage not in task.collaborators.all():
-                return Response({'error': f'User {user_to_manage.username} is not a collaborator.'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {'error': 'User is not collaborator.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             task.collaborators.remove(user_to_manage)
-            return Response(status=status.HTTP_204_NO_CONTENT) # Success, no content
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class CommentViewSet(viewsets.ModelViewSet):
-    """ API endpoint for Comments nested under Tasks """
-    serializer_class = CommentSerializer
-    permission_classes = [permissions.IsAuthenticated] # Base permission
+class TaskHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = TaskHistorySerializer
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """ Filter comments for the specific task in URL """
-        task_pk = self.kwargs.get('task_pk')
-        get_object_or_404(Task, pk=task_pk)
-        return Comment.objects.filter(task__pk=task_pk).select_related('author__profile').order_by('created_at')
-
-    def perform_create(self, serializer):
-        """ Check permission on parent task and save comment """
         task_pk = self.kwargs.get('task_pk')
         task = get_object_or_404(Task, pk=task_pk)
         if not IsOwnerOrAdminOrManager().has_object_permission(self.request, self, task):
-             raise PermissionDenied("You do not have permission to comment on this task.")
-        serializer.save(author=self.request.user, task=task)
+            raise PermissionDenied("Cannot view history for this task.")
+        return TaskHistory.objects.filter(task=task).select_related(
+            'user__profile'
+        ).order_by('-timestamp')
 
     def get_permissions(self):
-        """ Set specific permissions for update/destroy actions """
-        if self.action in ['update', 'partial_update', 'destroy']:
-            permission_classes = [IsCommentAuthorOrAdminOrManager]
-        else: 
-            permission_classes = [permissions.IsAuthenticated] 
-        return [permission() for permission in permission_classes]
+        return [permission() for permission in self.permission_classes]

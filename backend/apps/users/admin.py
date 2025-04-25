@@ -3,6 +3,8 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from .models import Profile 
 
+
+#th e verbose name has been set as user profile for a reason, in this case each user has only one profile so well, user profile is technically the right term to use
 class ProfileInline(admin.StackedInline):
     model = Profile
     can_delete = False
