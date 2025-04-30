@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders', 
     'rest_framework',
     'rest_framework.authtoken',
     'django_filters',
@@ -35,6 +36,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # <<< ADD THIS HERE
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -99,3 +101,11 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10
 }
+
+# backend/taskman/settings.py
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173", # Your Vite dev server default
+    "http://127.0.0.1:5173", # Sometimes needed as well
+]
+# Optional: If you need to send cookies or Authorization headers cross-origin
+# CORS_ALLOW_CREDENTIALS = True
