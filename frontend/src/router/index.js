@@ -1,32 +1,35 @@
+// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router';
-import { useAuthStore } from '@/store/auth'; 
+import { useAuthStore } from '@/store/auth';
 
 const LoginPage = () => import('../views/LoginPage.vue');
 const RegisterPage = () => import('../views/RegisterPage.vue');
-const TaskListPlaceholder = { template: '<div style="padding:20px;"><h1>Tasks</h1><p>Task list will appear here.</p></div>' };
+// --- CHANGE THIS ---
+const TaskListView = () => import('../views/TaskListView.vue'); // Import the actual view
 
 const routes = [
   {
     path: '/',
-    redirect: '/tasks' 
+    redirect: '/tasks' // Can now safely redirect to tasks
   },
   {
     path: '/login',
     name: 'Login',
     component: LoginPage,
-    meta: { requiresGuest: true } 
+    meta: { requiresGuest: true }
   },
   {
     path: '/register',
     name: 'Register',
     component: RegisterPage,
-    meta: { requiresGuest: true } 
+    meta: { requiresGuest: true }
   },
   {
     path: '/tasks',
-    name: 'TaskList', // Name for navigation
-    component: TaskListPlaceholder, // Use placeholder
-    meta: { requiresAuth: true } // Requires login
+    name: 'TaskList',
+    // --- USE THE REAL COMPONENT ---
+    component: TaskListView,
+    meta: { requiresAuth: true }
   },
 ];
 
@@ -35,22 +38,21 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore(); 
-  const isAuthenticated = authStore.getIsAuthenticated; 
+// --- Navigation Guard (Unchanged from previous version) ---
+router.beforeEach(async (to, from, next) => {
+   // ... (same guard logic as before) ...
+    const authStore = useAuthStore();
+    const isAuthenticated = authStore.getIsAuthenticated;
+    const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
+    const requiresGuest = to.matched.some(record => record.meta.requiresGuest);
 
-  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  const requiresGuest = to.matched.some(record => record.meta.requiresGuest);
-
-  if (requiresAuth && !isAuthenticated) {
-    console.log(`Guard: Navigating to '${to.name?.toString()}' requires auth. Redirecting to Login.`);
-    next({ name: 'Login', query: { redirect: to.fullPath } });
-  } else if (requiresGuest && isAuthenticated) {
-    console.log(`Guard: Navigating to guest route '${to.name?.toString()}' while logged in. Redirecting to TaskList.`);
-    next({ name: 'TaskList' });
-  } else {
-    next();
-  }
+    if (requiresAuth && !isAuthenticated) {
+        next({ name: 'Login', query: { redirect: to.fullPath } });
+    } else if (requiresGuest && isAuthenticated) {
+        next({ name: 'TaskList' });
+    } else {
+        next();
+    }
 });
 
 export default router;

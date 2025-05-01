@@ -1,34 +1,41 @@
-import { createApp } from 'vue'
-import App from './App.vue' 
-import { createPinia } from 'pinia' 
-import router from './router' 
+// src/main.js
+import { createApp } from 'vue';
+import App from './App.vue';
+import { createPinia } from 'pinia';
+import router from './router'; // Make sure './router' correctly points to your router setup
 
-// --- Vuetify ---
-import 'vuetify/styles' 
-import { createVuetify } from 'vuetify'
-import * as components from 'vuetify/components'
-import * as directives from 'vuetify/directives' 
-import '@mdi/font/css/materialdesignicons.css' 
+// Vuetify
+import 'vuetify/styles';
+import { createVuetify } from 'vuetify';
+import * as components from 'vuetify/components';
+import * as directives from 'vuetify/directives';
+import '@mdi/font/css/materialdesignicons.css'; // Material Design Icons CSS
 
-// Create Vuetify instance
+// --- Ag-Grid Module Registration ---
+// ❌ REMOVED global registration from here. Modules will be passed via props.
+// import { ModuleRegistry } from '@ag-grid-community/core';
+// import { ClientSideRowModelModule } from "@ag-grid-community/client-side-row-model";
+// ModuleRegistry.registerModules([ClientSideRowModelModule]);
+// --- End Ag-Grid Module Registration Removal ---
+
+// --- Initialize Plugins ---
+const pinia = createPinia();
+
 const vuetify = createVuetify({
   components,
   directives,
   icons: {
-    defaultSet: 'mdi', 
+    defaultSet: 'mdi', // Set Material Design Icons as the default icon set
   },
-})
-// --- End Vuetify ---
+  // Add any other Vuetify configurations here
+});
 
-// Create the main Vue app instance
-const app = createApp(App)
+// --- Create and Configure Vue App ---
+const app = createApp(App);
 
-// Create Pinia instance for state management
-const pinia = createPinia()
+app.use(pinia);   // Use Pinia for state management
+app.use(router);  // Use Vue Router for navigation
+app.use(vuetify); // Use Vuetify for UI components
 
-// Use the plugins
-app.use(vuetify) // Use Vuetify components/styles
-app.use(pinia)   // Use Pinia for state management
-app.use(router)  // Use Vue Router for navigation
-
-app.mount('#app')
+// --- Mount the App ---
+app.mount('#app');
