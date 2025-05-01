@@ -2,7 +2,7 @@
   <v-app>
     <!-- App Bar for Navigation/Logout -->
     <v-app-bar app color="primary" dark density="compact">
-      <v-app-bar-title>Task Manager</v-app-bar-title>
+      <v-app-bar-title>Taskman</v-app-bar-title>
       <v-spacer></v-spacer>
 
       <!-- Show only if user is logged in -->
