@@ -2,7 +2,7 @@
     <v-container fluid class="pa-4 task-list-view-container d-flex flex-column">
 
       <div class="d-flex justify-space-between align-center mb-4">
-        <h1 class="text-h5">My Tasks</h1>
+        <h1 class="text-h5">Your Tasks</h1>
         <v-text-field
           v-model="search"
           label="Search Tasks"

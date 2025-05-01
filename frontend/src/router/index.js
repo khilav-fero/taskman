@@ -1,16 +1,14 @@
-// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 
 const LoginPage = () => import('../views/LoginPage.vue');
 const RegisterPage = () => import('../views/RegisterPage.vue');
-// --- CHANGE THIS ---
-const TaskListView = () => import('../views/TaskListView.vue'); // Import the actual view
+const TaskListView = () => import('../views/TaskListView.vue'); 
 
 const routes = [
   {
     path: '/',
-    redirect: '/tasks' // Can now safely redirect to tasks
+    redirect: '/tasks' 
   },
   {
     path: '/login',
@@ -27,7 +25,6 @@ const routes = [
   {
     path: '/tasks',
     name: 'TaskList',
-    // --- USE THE REAL COMPONENT ---
     component: TaskListView,
     meta: { requiresAuth: true }
   },
@@ -38,9 +35,7 @@ const router = createRouter({
   routes,
 });
 
-// --- Navigation Guard (Unchanged from previous version) ---
 router.beforeEach(async (to, from, next) => {
-   // ... (same guard logic as before) ...
     const authStore = useAuthStore();
     const isAuthenticated = authStore.getIsAuthenticated;
     const requiresAuth = to.matched.some(record => record.meta.requiresAuth);

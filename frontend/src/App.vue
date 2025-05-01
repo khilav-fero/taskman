@@ -1,30 +1,31 @@
 <template>
   <v-app>
-    <!-- App Bar for Navigation/Logout -->
-    <v-app-bar app color="primary" dark density="compact">
-      <v-app-bar-title>Taskman</v-app-bar-title>
-      <v-spacer></v-spacer>
-
-      <!-- Show only if user is logged in -->
-      <template v-if="authStore.getIsAuthenticated">
-        <span class="mr-3 text-body-2">
-          Welcome, {{ authStore.getUser?.username }} ({{ authStore.userRole }})
-        </span>
-        <v-btn icon @click="handleLogout">
-          <v-icon>mdi-logout</v-icon>
-          <v-tooltip activator="parent" location="bottom">Logout</v-tooltip>
-        </v-btn>
-      </template>
+    <v-app-bar app color="primary" dark flat>
+      <v-container class="d-flex justify-space-between align-center">
+        <v-app-bar-title class="text-h6 font-weight-bold">Taskman</v-app-bar-title>
+        <template v-if="authStore.getIsAuthenticated">
+          <div class="d-flex align-center">
+            <v-avatar class="mr-2" size="32">
+              <v-icon>mdi-account-circle</v-icon>
+            </v-avatar>
+            <div class="mr-4 text-caption white--text">
+              {{ authStore.getUser?.username }} ({{ authStore.userRole }})
+            </div>
+            <v-btn icon @click="handleLogout" class="logout-btn" color="white">
+              <v-icon>mdi-logout</v-icon>
+              <v-tooltip activator="parent" location="bottom">Logout</v-tooltip>
+            </v-btn>
+          </div>
+        </template>
+      </v-container>
     </v-app-bar>
 
-    <!-- Main Content Area -->
     <v-main>
-      <v-container v-if="authStore.getLoading && !initialCheckDone" fluid fill-height>
-          <v-row align="center" justify="center">
-              <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-          </v-row>
+      <v-container v-if="authStore.getLoading && !initialCheckDone" class="fill-height" fluid>
+        <v-row align="center" justify="center">
+          <v-progress-circular indeterminate color="blue lighten-2" size="64"></v-progress-circular>
+        </v-row>
       </v-container>
-      <!-- Router view renders the current page component -->
       <router-view v-else />
     </v-main>
   </v-app>
@@ -42,9 +43,8 @@ const handleLogout = () => {
 };
 
 onMounted(async () => {
-  // Check auth status only if not already authenticated (prevents redundant API call on hot reload)
   if (!authStore.getIsAuthenticated) {
-      await authStore.checkAuth();
+    await authStore.checkAuth();
   }
   initialCheckDone.value = true;
 });
@@ -52,19 +52,46 @@ onMounted(async () => {
 
 <style lang="scss">
 html, body, #app {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    /* Consider setting overflow if needed */
-    /* overflow-y: auto; */
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #fafafa;
+  font-family: 'Inter', sans-serif;
 }
+
 .fill-height {
-    /* Ensure container takes full height for centering */
-    min-height: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-/* Global styles can go here */
+
+.logout-btn {
+  transition: background-color 0.3s ease;
+}
+
+.logout-btn:hover {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.v-btn {
+  transition: background-color 0.3s ease;
+}
+
+.v-app-bar {
+  background-color: #1976d2; 
+}
+
+.v-btn.white {
+  color: #1976d2; 
+}
+
+.white--text {
+  color: #ffffff !important;
+}
+
+.main-bg {
+  background-color: #f2f4f7;
+  padding-top: 32px;
+}
 </style>
