@@ -86,7 +86,7 @@ html, body, #app {
 }
 
 .v-app-bar {
-  background-color: #1e88e5; /* Slightly brighter blue */
+  background-color: #1e88e5; 
 }
 
 .v-btn.white {

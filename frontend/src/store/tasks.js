@@ -1,58 +1,100 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
-import { fetchTasks as apiFetchTasks } from '@/services/taskService';
+import {
+    fetchTasks as apiFetchTasks,
+    createTask as apiCreateTask,
+    updateTask as apiUpdateTask
+} from '@/services/taskService';
 
 export const useTasksStore = defineStore('tasks', () => {
   const tasksList = ref([]);
   const tasksLoading = ref(false);
   const tasksError = ref(null);
+  const formLoading = ref(false);
+  const formError = ref(null);
 
   const getTasksList = computed(() => tasksList.value);
   const getTasksLoading = computed(() => tasksLoading.value);
   const getTasksError = computed(() => tasksError.value);
+  const getFormLoading = computed(() => formLoading.value);
+  const getFormError = computed(() => formError.value);
+
+  function clearFormError() {
+      formError.value = null;
+  }
+  function clearTasksError() {
+      tasksError.value = null;
+  }
 
   async function fetchTasksAction() {
     tasksLoading.value = true;
     tasksError.value = null;
     try {
       const responseData = await apiFetchTasks();
-      console.log('API Task Data Received in Store:', responseData);
-
       if (responseData && typeof responseData === 'object' && Array.isArray(responseData.results)) {
           tasksList.value = responseData.results;
-          console.log('Processed paginated results:', tasksList.value);
+      } else {
+          console.warn("Received task data not paginated:", responseData);
+          tasksList.value = Array.isArray(responseData) ? responseData : [];
       }
-      else if (Array.isArray(responseData)) {
-          console.warn("Received task data was an array. Handling array directly.");
-          tasksList.value = responseData;
-      }
-      else {
-          console.error("Received task data is not in a known format:", responseData);
-          tasksList.value = [];
-          tasksError.value = 'Received unexpected data format for tasks.';
-      }
+      return tasksList.value;
     } catch (err) {
-      console.error("Error fetching tasks in store:", err.response?.data || err.message);
-      const detail = err.response?.data?.detail;
-      tasksError.value = detail || err.message || 'Failed to load tasks. Please try again.';
+      console.error("Error fetching tasks in store:", err);
+      tasksError.value = err.response?.data?.detail || 'Failed to load tasks.';
       tasksList.value = [];
+      throw err;
     } finally {
       tasksLoading.value = false;
     }
   }
 
-  function clearTasksError() {
-    tasksError.value = null;
+  async function createTaskAction(taskData) {
+      formLoading.value = true;
+      formError.value = null;
+      try {
+          const newTask = await apiCreateTask(taskData);
+          await fetchTasksAction();
+          return newTask;
+      } catch (err) {
+          console.error("Error creating task in store:", err);
+          formError.value = err.response?.data || 'Failed to create task.';
+          throw err;
+      } finally {
+          formLoading.value = false;
+      }
+  }
+
+  async function updateTaskAction(taskId, taskData) {
+      formLoading.value = true;
+      formError.value = null;
+      try {
+          const updatedTask = await apiUpdateTask(taskId, taskData);
+          await fetchTasksAction();
+          return updatedTask;
+      } catch (err) {
+          console.error("Error updating task in store:", err);
+          formError.value = err.response?.data || 'Failed to update task.';
+          throw err;
+      } finally {
+          formLoading.value = false;
+      }
   }
 
   return {
     tasksList,
     tasksLoading,
     tasksError,
+    formLoading,
+    formError,
     getTasksList,
     getTasksLoading,
     getTasksError,
+    getFormLoading,
+    getFormError,
     fetchTasksAction,
-    clearTasksError,
+    createTaskAction,
+    updateTaskAction,
+    clearFormError,
+    clearTasksError, 
   };
 });
