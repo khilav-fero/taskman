@@ -1,22 +1,29 @@
 <template>
   <v-app>
     <v-app-bar app color="primary" dark flat>
-      <v-container class="d-flex justify-space-between align-center">
-        <v-app-bar-title class="text-h6 font-weight-bold">Taskman</v-app-bar-title>
-        <template v-if="authStore.getIsAuthenticated">
-          <div class="d-flex align-center">
-            <v-avatar class="mr-2" size="32">
-              <v-icon>mdi-account-circle</v-icon>
-            </v-avatar>
-            <div class="mr-4 text-caption white--text">
-              {{ authStore.getUser?.username }} ({{ authStore.userRole }})
+      <v-container fluid>
+        <v-row align="center" justify="space-between" no-gutters>
+          <!-- Left: App Title -->
+          <v-col cols="auto" class="pl-4">
+            <v-app-bar-title class="text-h6 font-weight-bold">Taskman</v-app-bar-title>
+          </v-col>
+
+          <!-- Right: User Info + Logout -->
+          <v-col cols="auto" v-if="authStore.getIsAuthenticated">
+            <div class="d-flex align-center">
+              <v-avatar class="mr-2" size="32">
+                <v-icon>mdi-account-circle</v-icon>
+              </v-avatar>
+              <div class="mr-4 text-caption white--text">
+                {{ authStore.getUser?.username }} ({{ authStore.userRole }})
+              </div>
+              <v-btn icon @click="handleLogout" class="logout-btn" color="white">
+                <v-icon>mdi-logout</v-icon>
+                <v-tooltip activator="parent" location="bottom">Logout</v-tooltip>
+              </v-btn>
             </div>
-            <v-btn icon @click="handleLogout" class="logout-btn" color="white">
-              <v-icon>mdi-logout</v-icon>
-              <v-tooltip activator="parent" location="bottom">Logout</v-tooltip>
-            </v-btn>
-          </div>
-        </template>
+          </v-col>
+        </v-row>
       </v-container>
     </v-app-bar>
 
@@ -79,11 +86,11 @@ html, body, #app {
 }
 
 .v-app-bar {
-  background-color: #1976d2; 
+  background-color: #1e88e5; /* Slightly brighter blue */
 }
 
 .v-btn.white {
-  color: #1976d2; 
+  color: #1e88e5;
 }
 
 .white--text {
