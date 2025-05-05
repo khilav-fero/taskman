@@ -129,7 +129,6 @@
           </template>
         </v-data-table>
   
-        <!-- Empty/Initializing States -->
         <div
           v-else-if="showEmptyState"
           class="empty-state-content flex-grow-1 d-flex flex-column justify-center align-center text-center pa-8"
@@ -273,7 +272,7 @@
   
   onMounted(() => {
     loadTasks();
-  });
+  });   
   </script>
   
   <style lang="scss" scoped>
@@ -307,7 +306,6 @@
     }
   }
   .empty-state-content, .initializing-placeholder {
-    /* Utility classes handle most styling */
   }
   </style>
   

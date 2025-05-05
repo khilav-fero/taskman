@@ -1,27 +1,50 @@
 <template>
   <v-app>
-    <v-app-bar app color="primary" dark flat>
+    <v-app-bar app color="primary" dark flat density="compact">
       <v-container fluid>
-        <v-row align="center" justify="space-between" no-gutters>
-          <!-- Left: App Title -->
-          <v-col cols="auto" class="pl-4">
-            <v-app-bar-title class="text-h6 font-weight-bold">Taskman</v-app-bar-title>
+        <v-row align="center" no-gutters>
+          <v-col cols="auto">
+            <v-app-bar-title class="text-h6 font-weight-medium">
+              Taskman
+            </v-app-bar-title>
           </v-col>
 
-          <!-- Right: User Info + Logout -->
-          <v-col cols="auto" v-if="authStore.getIsAuthenticated">
-            <div class="d-flex align-center">
-              <v-avatar class="mr-2" size="32">
-                <v-icon>mdi-account-circle</v-icon>
-              </v-avatar>
-              <div class="mr-4 text-caption white--text">
-                {{ authStore.getUser?.username }} ({{ authStore.userRole }})
-              </div>
-              <v-btn icon @click="handleLogout" class="logout-btn" color="white">
-                <v-icon>mdi-logout</v-icon>
-                <v-tooltip activator="parent" location="bottom">Logout</v-tooltip>
+          <v-col class="d-flex justify-start pl-6">
+            <template v-if="authStore.getIsAuthenticated">
+              <v-btn
+                :to="{ name: 'TaskList' }" text class="mx-1"
+                variant="text" prepend-icon="mdi-view-list"
+              >
+                  Tasks
               </v-btn>
-            </div>
+              <!-- CONDITIONAL USERS BUTTON -->
+              <v-btn
+                  v-if="isAdminOrManager"
+                  :to="{ name: 'UserList' }"
+                  text class="mx-1" variant="text" prepend-icon="mdi-account-group"
+              >
+                  Users
+              </v-btn>
+            </template>
+          </v-col>
+
+          <v-col cols="auto" class="d-flex justify-end align-center">
+            <template v-if="authStore.getIsAuthenticated">
+               <v-chip label size="small" class="mr-1" variant="elevated" color="primary-darken-1">
+                 <v-icon start icon="mdi-account-circle"></v-icon>
+                 {{ authStore.getUser?.username }} ({{ authStore.userRole }})
+              </v-chip>
+              <v-tooltip location="bottom">
+                 <template v-slot:activator="{ props }">
+                     <v-btn v-bind="props" icon="mdi-logout" @click="handleLogout" variant="text"></v-btn>
+                 </template>
+                <span>Logout</span>
+              </v-tooltip>
+            </template>
+            <template v-else>
+               <v-btn :to="{ name: 'Login' }" text variant="text">Login</v-btn>
+               <v-btn :to="{ name: 'Register' }" text variant="text">Register</v-btn>
+            </template>
           </v-col>
         </v-row>
       </v-container>
@@ -29,9 +52,9 @@
 
     <v-main>
       <v-container v-if="authStore.getLoading && !initialCheckDone" class="fill-height" fluid>
-        <v-row align="center" justify="center">
-          <v-progress-circular indeterminate color="blue lighten-2" size="64"></v-progress-circular>
-        </v-row>
+          <v-row align="center" justify="center">
+              <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+          </v-row>
       </v-container>
       <router-view v-else />
     </v-main>
@@ -39,66 +62,27 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { useAuthStore } from '@/store/auth';
 
 const authStore = useAuthStore();
 const initialCheckDone = ref(false);
 
-const handleLogout = () => {
-  authStore.logout();
-};
+const isAdminOrManager = computed(() => {
+    const role = authStore.userRole;
+    return role === 'ADMIN' || role === 'MANAGER';
+});
+
+const handleLogout = () => { authStore.logout(); };
 
 onMounted(async () => {
-  if (!authStore.getIsAuthenticated) {
-    await authStore.checkAuth();
-  }
+  if (!authStore.getIsAuthenticated) { await authStore.checkAuth(); }
   initialCheckDone.value = true;
 });
 </script>
 
 <style lang="scss">
-html, body, #app {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background-color: #fafafa;
-  font-family: 'Inter', sans-serif;
-}
-
-.fill-height {
-  min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.logout-btn {
-  transition: background-color 0.3s ease;
-}
-
-.logout-btn:hover {
-  background-color: rgba(255, 255, 255, 0.12) !important;
-}
-
-.v-btn {
-  transition: background-color 0.3s ease;
-}
-
-.v-app-bar {
-  background-color: #1e88e5; 
-}
-
-.v-btn.white {
-  color: #1e88e5;
-}
-
-.white--text {
-  color: #ffffff !important;
-}
-
-.main-bg {
-  background-color: #f2f4f7;
-  padding-top: 32px;
-}
+html, body, #app { height: 100%; margin: 0; padding: 0; font-family: 'Roboto', sans-serif; }
+.fill-height { min-height: 100%; display: flex; align-items: center; justify-content: center;}
+.v-app-bar .v-btn { text-transform: none; }
 </style>
