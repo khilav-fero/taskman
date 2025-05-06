@@ -1,88 +1,351 @@
 <template>
-  <v-app>
-    <v-app-bar app color="primary" dark flat density="compact">
-      <v-container fluid>
-        <v-row align="center" no-gutters>
-          <v-col cols="auto">
-            <v-app-bar-title class="text-h6 font-weight-medium">
-              Taskman
-            </v-app-bar-title>
-          </v-col>
+  <v-app id="taskman-app">
 
-          <v-col class="d-flex justify-start pl-6">
-            <template v-if="authStore.getIsAuthenticated">
-              <v-btn
-                :to="{ name: 'TaskList' }" text class="mx-1"
-                variant="text" prepend-icon="mdi-view-list"
-              >
-                  Tasks
-              </v-btn>
-              <!-- CONDITIONAL USERS BUTTON -->
-              <v-btn
-                  v-if="isAdminOrManager"
-                  :to="{ name: 'UserList' }"
-                  text class="mx-1" variant="text" prepend-icon="mdi-account-group"
-              >
-                  Users
-              </v-btn>
-            </template>
-          </v-col>
+    <v-navigation-drawer
+      v-model="drawerVisible"
+      :rail="rail && lgAndUp"
+      :expand-on-hover="rail && lgAndUp"
+      :permanent="lgAndUp"
+      app
+      color="surface"
+      class="nav-drawer"
+      width="260"
+    >
+        <v-list-item
+          :prepend-avatar="authStore.getUser?.profile?.avatar_url || 'https://randomuser.me/api/portraits/lego/6.jpg' + (authStore.getUser?.username?.[0]?.toUpperCase() || 'U')"
+          :title="!rail || !lgAndUp ? (authStore.getUser?.username || 'User') : undefined"
+          :subtitle="!rail || !lgAndUp ? (authStore.userRole) : undefined"
+          nav
+          class="user-profile-list-item pa-2 mx-1"
+          min-height="56"
+        >
+          <template v-slot:append v-if="lgAndUp && !rail">
+             <v-tooltip location="end" text="Collapse Sidebar">
+                <template v-slot:activator="{props}">
+                    <v-btn
+                        v-bind="props"
+                        variant="text"
+                        icon="mdi-chevron-left"
+                        @click.stop="rail = !rail"
+                        size="small"
+                        class="collapse-btn"
+                    ></v-btn>
+                </template>
+             </v-tooltip>
+          </template>
+        </v-list-item>
 
-          <v-col cols="auto" class="d-flex justify-end align-center">
-            <template v-if="authStore.getIsAuthenticated">
-               <v-chip label size="small" class="mr-1" variant="elevated" color="primary-darken-1">
-                 <v-icon start icon="mdi-account-circle"></v-icon>
-                 {{ authStore.getUser?.username }} ({{ authStore.userRole }})
-              </v-chip>
-              <v-tooltip location="bottom">
-                 <template v-slot:activator="{ props }">
-                     <v-btn v-bind="props" icon="mdi-logout" @click="handleLogout" variant="text"></v-btn>
+        <v-divider class="mx-2"></v-divider>
+
+        <v-list density="compact" nav class="pa-2">
+          <template v-for="item in navigationItems" :key="item.value">
+            <v-list-item
+                v-if="shouldShowNavItem(item)"
+                :prepend-icon="item.icon"
+                :title="item.title"
+                :value="item.value"
+                :to="{ name: item.routeName }"
+                active-class="drawer-list-item--active"
+                class="drawer-list-item mb-1"
+                link
+                rounded="lg"
+             >
+                 <v-tooltip location="end" :text="item.title" :disabled="!rail || !lgAndUp">
+                    <template v-slot:activator="{ props }">
+                        <div v-bind="props" style="width: 100%;"></div>
+                    </template>
+                 </v-tooltip>
+             </v-list-item>
+          </template>
+        </v-list>
+
+        <template v-slot:append>
+           <div class="pa-2 drawer-append-logout">
+             <v-tooltip location="top" text="Logout" :disabled="!rail || !lgAndUp">
+                 <template v-slot:activator="{props}">
+                     <v-btn
+                        v-bind="props"
+                        :block="!rail || !lgAndUp"
+                        :icon="rail && lgAndUp ? 'mdi-logout-variant' : undefined"
+                        :prepend-icon="!rail || !lgAndUp ? 'mdi-logout-variant' : undefined"
+                        @click="handleLogout"
+                        color="secondary"
+                        :variant="rail && lgAndUp ? 'text' : 'tonal'"
+                        :size="rail && lgAndUp ? 'default': 'default'"
+                        v-if="authStore.getIsAuthenticated"
+                        class="logout-btn"
+                      >
+                        <span v-if="!rail || !lgAndUp">Logout</span>
+                     </v-btn>
                  </template>
-                <span>Logout</span>
-              </v-tooltip>
-            </template>
-            <template v-else>
-               <v-btn :to="{ name: 'Login' }" text variant="text">Login</v-btn>
-               <v-btn :to="{ name: 'Register' }" text variant="text">Register</v-btn>
-            </template>
-          </v-col>
-        </v-row>
-      </v-container>
+               </v-tooltip>
+           </div>
+        </template>
+
+    </v-navigation-drawer>
+
+    <v-app-bar
+      app
+      color="surface"
+      flat
+      height="64"
+      class="app-bar-border"
+    >
+       <v-app-bar-nav-icon v-if="!lgAndUp" @click.stop="drawerVisible = !drawerVisible"></v-app-bar-nav-icon>
+       <v-btn
+            v-else-if="rail"
+            variant="text"
+            icon="mdi-chevron-right"
+            @click.stop="rail = !rail"
+            size="small"
+            class="expand-from-rail-btn"
+       ></v-btn>
+
+
+       <v-toolbar-title class="app-title d-none d-sm-flex align-center">
+            <v-icon color="primary" class="mr-2">mdi-checkbox-marked-circle-auto-outline</v-icon>
+            Taskman
+       </v-toolbar-title>
+
+       <v-spacer />
+
+       <template v-if="!authStore.getIsAuthenticated">
+           <v-btn :to="{ name: 'Login' }" class="auth-btn mx-1" variant="text">Login</v-btn>
+           <v-btn :to="{ name: 'Register' }" class="auth-btn mx-1" variant="flat" color="primary">Register</v-btn>
+       </template>
+
     </v-app-bar>
 
-    <v-main>
+    <v-main class="main-content-area">
       <v-container v-if="authStore.getLoading && !initialCheckDone" class="fill-height" fluid>
           <v-row align="center" justify="center">
-              <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+              <v-progress-circular indeterminate color="primary" size="50" width="3"></v-progress-circular>
           </v-row>
       </v-container>
-      <router-view v-else />
+      <router-view v-else v-slot="{ Component }">
+        <transition name="page-fade-slide" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </v-main>
   </v-app>
 </template>
 
 <script setup>
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import { useAuthStore } from '@/store/auth';
+import { useDisplay } from 'vuetify';
 
 const authStore = useAuthStore();
 const initialCheckDone = ref(false);
+const { mobile, lgAndUp } = useDisplay();
+
+const drawerVisible = ref(lgAndUp.value);
+const rail = ref(true);
+
+watch(lgAndUp, (newVal, oldVal) => {
+  if (newVal !== oldVal) {
+    drawerVisible.value = newVal;
+    if(newVal) {
+        rail.value = true;
+    } else {
+        rail.value = false;
+    }
+  }
+});
+
+
+const navigationItems = ref([
+    { title: 'Tasks', icon: 'mdi-view-list-outline', value:'tasks', routeName: 'TaskList', requiresAuth: true },
+    { title: 'Users', icon: 'mdi-account-group-outline', value: 'users', routeName: 'UserList', requiresAdminOrManager: true, requiresAuth: true },
+]);
+
 
 const isAdminOrManager = computed(() => {
     const role = authStore.userRole;
     return role === 'ADMIN' || role === 'MANAGER';
 });
 
-const handleLogout = () => { authStore.logout(); };
+const shouldShowNavItem = (item) => {
+    const isAuthenticated = authStore.getIsAuthenticated;
+    if (item.requiresAuth && !isAuthenticated) return false;
+    if (item.requiresAdminOrManager && !isAdminOrManager.value) return false;
+    return true;
+}
+
+const handleLogout = () => {
+  authStore.logout();
+};
 
 onMounted(async () => {
-  if (!authStore.getIsAuthenticated) { await authStore.checkAuth(); }
+  if (!authStore.getIsAuthenticated) {
+    await authStore.checkAuth();
+  }
   initialCheckDone.value = true;
+  if (!lgAndUp.value) {
+      rail.value = false;
+  }
 });
 </script>
 
 <style lang="scss">
-html, body, #app { height: 100%; margin: 0; padding: 0; font-family: 'Roboto', sans-serif; }
-.fill-height { min-height: 100%; display: flex; align-items: center; justify-content: center;}
-.v-app-bar .v-btn { text-transform: none; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: rgb(var(--v-theme-background));
+  color: rgb(var(--v-theme-on-background));
+}
+
+.nav-drawer {
+    border-right: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.08) !important;
+    transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+    .v-navigation-drawer__content {
+        overflow-x: hidden;
+    }
+}
+
+.user-profile-list-item {
+    transition: padding 0.2s ease-in-out;
+    .v-list-item-title {
+        font-weight: 600;
+        font-size: 0.9rem;
+        line-height: 1.2;
+        color: rgb(var(--v-theme-on-surface));
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+     .v-list-item-subtitle {
+        font-size: 0.75rem;
+        color: rgba(var(--v-theme-on-surface-rgb), 0.6);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .v-avatar {
+        margin: 4px 0;
+    }
+    .collapse-btn {
+        color: rgba(var(--v-theme-on-surface-rgb), 0.6);
+        &:hover {
+            color: rgb(var(--v-theme-on-surface));
+        }
+    }
+}
+
+.drawer-list-item {
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+    margin: 2px 8px;
+
+   .v-list-item-title {
+      font-size: 0.9rem !important;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+   }
+   .v-list-item__prepend > .v-icon {
+      margin-inline-end: 20px !important; // Increased spacing
+      opacity: 0.7;
+      transition: opacity 0.15s ease-in-out;
+   }
+
+  &:hover {
+    background-color: rgba(var(--v-theme-primary-rgb), 0.07) !important;
+    color: rgb(var(--v-theme-primary)) !important;
+    .v-list-item__prepend > .v-icon {
+       opacity: 1;
+    }
+  }
+
+  &.drawer-list-item--active {
+    background-color: rgba(var(--v-theme-primary-rgb), 0.1) !important;
+    color: rgb(var(--v-theme-primary)) !important;
+    .v-list-item-title {
+       font-weight: 600;
+    }
+    .v-list-item__prepend > .v-icon {
+       opacity: 1;
+       color: rgb(var(--v-theme-primary)) !important;
+    }
+  }
+}
+
+.drawer-append-logout {
+    margin-bottom: 8px;
+   .logout-btn span {
+       font-weight: 500;
+   }
+}
+
+.app-bar-border {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.08) !important;
+}
+
+.app-title {
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  letter-spacing: -0.01em;
+  transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1); // Smooth title shift
+}
+
+.expand-from-rail-btn {
+    color: rgba(var(--v-theme-on-surface-rgb), 0.6);
+    &:hover {
+       color: rgb(var(--v-theme-on-surface));
+    }
+}
+
+.auth-btn {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  border-radius: 6px;
+
+  &.v-btn--variant-text {
+    color: rgba(var(--v-theme-on-surface-rgb), 0.85);
+     &:hover {
+       color: rgb(var(--v-theme-on-surface));
+    }
+  }
+   &.v-btn--variant-flat {
+     color: rgb(var(--v-theme-on-primary)) !important;
+   }
+}
+
+.main-content-area {
+  transition: padding-left 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important; // Smooth main content shift
+}
+
+.page-fade-slide-enter-active,
+.page-fade-slide-leave-active {
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+.page-fade-slide-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.v-tooltip > .v-overlay__content {
+  background-color: rgba(var(--v-theme-surface-rgb), 0.95) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  border: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.12);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  backdrop-filter: blur(2px);
+}
 </style>
