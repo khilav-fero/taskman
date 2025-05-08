@@ -29,31 +29,31 @@
     </div>
 
     <v-card
-      :loading="tasksStore.getTasksLoading"
+      :loading="tasksLoading"
       variant="outlined"
       class="flex-grow-1 d-flex flex-column card-container"
       :color="$vuetify.theme.current.colors.surface"
     >
       <v-alert
-        v-if="showError"
+        v-if="showErrorAlert"
         type="error"
         variant="tonal"
         closable
         class="ma-2 flex-shrink-0"
         density="compact"
         title="Error Loading Tasks"
-        @update:modelValue="clearTaskError"
+        @update:modelValue="clearComponentError"
       >
-        {{ tasksStore.getTasksError }}
+        {{ tasksError }}
       </v-alert>
 
       <v-data-table
         v-if="showTable"
         v-model="selectedTasks"
         :headers="dataTableHeaders"
-        :items="gridRowData"
+        :items="tasksList"
         :search="search"
-        :loading="tasksStore.getTasksLoading"
+        :loading="tasksLoading"
         :items-per-page="itemsPerPage"
         :sort-by="initialSortBy"
         item-value="id"
@@ -125,7 +125,7 @@
                   icon="mdi-delete-outline"
                   variant="text"
                   size="small"
-                  @click.stop="openDeleteDialog(item.id, item.title)"
+                  @click.stop="openDeleteDialog(item)"
                   color="error"
                   :aria-label="'Delete task ' + item.title"
                 ></v-btn>
@@ -158,7 +158,7 @@
          <v-btn v-if="canManageTasks" color="primary" @click="openCreateDialog" class="mt-4 create-task-btn">Create New Task</v-btn>
       </div>
       <div
-        v-else-if="!tasksStore.getTasksLoading && !showError"
+        v-else-if="!tasksLoading && !showErrorAlert"
         class="initializing-placeholder"
       >
         <v-progress-circular indeterminate color="primary" size="40"></v-progress-circular>
@@ -169,10 +169,11 @@
     <v-dialog v-model="isFormDialogOpen" persistent max-width="700px" @keydown.esc="closeFormDialog">
       <TaskForm
         :initial-data="editingTask"
-        :loading="tasksStore.isSubmitting"
-        :error="tasksStore.getFormError"
+        :loading="formSubmitting"
+        :error="formError"
         @submit="onFormSubmit"
         @cancel="closeFormDialog"
+        @clear-form-error="clearFormError"
         key="task-form-component"
       />
     </v-dialog>
@@ -194,14 +195,14 @@
               <v-btn
                   text
                   @click="isConfirmDeleteDialogOpen = false"
-                  :disabled="tasksStore.isSubmitting"
+                  :disabled="formSubmitting"
                   class="data-table-secondary-text"
               >Cancel</v-btn>
               <v-btn
                   color="error"
                   variant="flat"
-                  @click="confirmDelete"
-                  :loading="tasksStore.isSubmitting"
+                  @click="confirmDeleteTask"
+                  :loading="formSubmitting"
                   class="font-weight-bold"
               >Delete Task</v-btn>
           </v-card-actions>
@@ -211,13 +212,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { useTasksStore } from '@/store/tasks';
-import { useAuthStore } from '@/store/auth';
+import { ref, onMounted, computed, inject } from 'vue';
+import { fetchTasks, createTask as createTaskApi, updateTask as updateTaskApi, deleteTaskApi as deleteTaskServiceApi } from '@/services/taskService';
 import TaskForm from '@/components/TaskForm.vue';
 
-const tasksStore = useTasksStore();
-const authStore = useAuthStore();
+const currentUser = inject('currentUser', ref(null));
 
 const componentReady = ref(false);
 const itemsPerPage = ref(15);
@@ -225,9 +224,15 @@ const search = ref('');
 const selectedTasks = ref([]);
 const initialSortBy = ref([{ key: 'created_at', order: 'desc' }]);
 
+const tasksList = ref([]);
+const tasksLoading = ref(false);
+const tasksError = ref(null);
+const formSubmitting = ref(false);
+const formError = ref(null);
+
 const isConfirmDeleteDialogOpen = ref(false);
-const taskToDeleteId = ref(null);
-const taskToDeleteTitle = ref('');
+const taskToDelete = ref(null);
+const taskToDeleteTitle = computed(() => taskToDelete.value?.title || 'this task');
 
 const dataTableHeaders = ref([
   { title: 'Title & Description', key: 'title', sortable: true, class: 'text-wrap', minWidth: '300px', width: '35%' },
@@ -240,20 +245,19 @@ const dataTableHeaders = ref([
   { title: 'Actions', key: 'actions', sortable: false, align: 'center', width: '120px' }
 ]);
 
-const gridRowData = computed(() => tasksStore.getTasksList || []);
-const hasTasks = computed(() => gridRowData.value.length > 0);
-const showError = computed(() => !!tasksStore.getTasksError && !tasksStore.getTasksLoading);
+const hasTasks = computed(() => tasksList.value.length > 0);
+const showErrorAlert = computed(() => !!tasksError.value && !tasksLoading.value);
 
 const showTable = computed(() =>
-  componentReady.value && !tasksStore.getTasksLoading && !showError.value && (hasTasks.value || !!search.value)
+  componentReady.value && !tasksLoading.value && !showErrorAlert.value && (hasTasks.value || !!search.value)
 );
 const showEmptyState = computed(() =>
-  componentReady.value && !tasksStore.getTasksLoading && !showError.value && !hasTasks.value && !search.value
+  componentReady.value && !tasksLoading.value && !showErrorAlert.value && !hasTasks.value && !search.value
 );
 
+const userRole = computed(() => currentUser.value?.profile?.role || null);
 const canManageTasks = computed(() => {
-  const role = authStore.userRole;
-  return role === 'ADMIN' || role === 'MANAGER';
+  return userRole.value === 'ADMIN' || userRole.value === 'MANAGER';
 });
 
 const isFormDialogOpen = ref(false);
@@ -281,69 +285,95 @@ const getStatusColor = (status) => {
 
 const openCreateDialog = () => {
   editingTask.value = null;
-  tasksStore.clearFormError?.();
+  formError.value = null;
   isFormDialogOpen.value = true;
 };
 const openEditDialog = (taskData) => {
   editingTask.value = { ...taskData };
-  tasksStore.clearFormError?.();
+  formError.value = null;
   isFormDialogOpen.value = true;
 };
 const closeFormDialog = () => {
   isFormDialogOpen.value = false;
   editingTask.value = null;
-  tasksStore.clearFormError?.();
+  formError.value = null;
 };
 
-const openDeleteDialog = (id, title) => {
-  taskToDeleteId.value = id;
-  taskToDeleteTitle.value = title || 'this task';
+const openDeleteDialog = (task) => {
+  taskToDelete.value = task;
   isConfirmDeleteDialogOpen.value = true;
 };
 
-const confirmDelete = async () => {
-  if (!taskToDeleteId.value) return;
-  const success = await tasksStore.deleteTaskAction(taskToDeleteId.value);
-  if (success) {
+const confirmDeleteTask = async () => {
+  if (!taskToDelete.value || !taskToDelete.value.id) return;
+  formSubmitting.value = true;
+  formError.value = null;
+  try {
+    await deleteTaskServiceApi(taskToDelete.value.id);
     await loadTasks();
+    isConfirmDeleteDialogOpen.value = false;
+    taskToDelete.value = null;
+  } catch (err) {
+    formError.value = err?.detail || err?.message || 'Failed to delete task.';
+    console.error("Error deleting task:", err);
+  } finally {
+    formSubmitting.value = false;
   }
-  isConfirmDeleteDialogOpen.value = false;
-  taskToDeleteId.value = null;
-  taskToDeleteTitle.value = '';
 };
 
-
 const onFormSubmit = async (formDataFromForm) => {
+  formSubmitting.value = true;
+  formError.value = null;
   let success = false;
   try {
     if (editingTask.value && editingTask.value.id) {
-      success = await tasksStore.updateTaskAction(editingTask.value.id, formDataFromForm);
+      await updateTaskApi(editingTask.value.id, formDataFromForm);
     } else {
-      success = await tasksStore.createTaskAction(formDataFromForm);
+      await createTaskApi(formDataFromForm);
     }
-    if (success) {
-      await loadTasks();
-      closeFormDialog();
-    }
-  } catch (error) {
-    console.error("Error submitting task form from TaskListView:", error);
+    success = true;
+  } catch (err) {
+    formError.value = err?.detail || err?.message || (editingTask.value ? 'Failed to update task.' : 'Failed to create task.');
+    console.error("Error submitting task form:", err);
+  } finally {
+    formSubmitting.value = false;
+  }
+
+  if (success) {
+    await loadTasks();
+    closeFormDialog();
   }
 };
 
 const loadTasks = async () => {
-  if (!componentReady.value) tasksStore.clearTasksError?.();
+  tasksLoading.value = true;
+  tasksError.value = null;
   try {
-    await tasksStore.fetchTasksAction();
-  } catch (error) {
-     console.error('TaskListView: Could not load tasks.', error);
+    const responseData = await fetchTasks();
+     if (responseData && typeof responseData === 'object' && Array.isArray(responseData.results)) {
+        tasksList.value = responseData.results;
+    } else if (Array.isArray(responseData)) {
+        tasksList.value = responseData;
+    } else {
+        tasksList.value = [];
+        console.warn("Received task data in unexpected format:", responseData);
+    }
+  } catch (err) {
+     tasksError.value = err?.detail || err?.message || 'Could not load tasks.';
+     console.error('TaskListView: Could not load tasks.', err);
+     tasksList.value = [];
   }
   finally {
+    tasksLoading.value = false;
     componentReady.value = true;
   }
 };
 
-const clearTaskError = () => {
-  tasksStore.clearTasksError?.();
+const clearComponentError = () => {
+  tasksError.value = null;
+};
+const clearFormError = () => {
+  formError.value = null;
 };
 
 onMounted(() => {
@@ -357,26 +387,21 @@ onMounted(() => {
   height: calc(100vh - 64px);
   padding-bottom: 16px;
 }
-
 .card-container {
   border: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.12);
 }
-
 .header-title {
   color: rgb(var(--v-theme-on-background));
 }
-
 .search-field .v-field__input {
     min-height: 40px;
 }
 .create-task-btn {
   color: rgb(var(--v-theme-on-primary));
 }
-
 .task-data-table {
   --footer-height: 58px;
-  color: rgb(var(--v-theme-on-surface)); // Default text color for table content
-
+  color: rgb(var(--v-theme-on-surface));
   :deep(.v-table__wrapper) {
     height: calc(100% - var(--footer-height));
     overflow-y: auto;
@@ -384,73 +409,62 @@ onMounted(() => {
   :deep(thead th) {
     position: sticky;
     top: 0;
-    background-color: rgba(var(--v-theme-surface-rgb), 0.97) !important; // Slightly transparent for depth
-    backdrop-filter: blur(4px); // Optional: glassmorphism effect for header
-    z-index: 10; // Ensure header is above content
+    background-color: rgba(var(--v-theme-surface-rgb), 0.97) !important;
+    backdrop-filter: blur(4px);
+    z-index: 10;
     border-bottom: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.15) !important;
-    color: rgba(var(--v-theme-on-surface-rgb), 0.8) !important; // Header text color
+    color: rgba(var(--v-theme-on-surface-rgb), 0.8) !important;
     font-weight: 500 !important;
   }
   :deep(tbody tr) {
       &:hover {
           background-color: rgba(var(--v-theme-primary-rgb), 0.07) !important;
       }
-      &.v-data-table__tr--selected:hover { // Keep selected row hover distinct
+      &.v-data-table__tr--selected:hover {
           background-color: rgba(var(--v-theme-primary-rgb), 0.12) !important;
       }
   }
   :deep(.v-data-table__td) {
       border-bottom: thin solid rgba(var(--v-theme-on-surface-rgb), 0.08) !important;
-      padding-top: 12px !important; // Increase vertical padding for readability
+      padding-top: 12px !important;
       padding-bottom: 12px !important;
   }
    :deep(.v-data-table-footer) {
       border-top: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.15) !important;
       color: rgba(var(--v-theme-on-surface-rgb), 0.7) !important;
   }
-
   .data-table-primary-text, .cell-title {
       color: rgb(var(--v-theme-on-surface));
-      line-height: 1.45; // Increased line height
+      line-height: 1.45;
   }
   .data-table-secondary-text, .cell-description {
-      color: rgba(var(--v-theme-on-surface-rgb), 0.75); // Slightly lighter than full on-surface for secondary info
-      line-height: 1.45; // Increased line height
+      color: rgba(var(--v-theme-on-surface-rgb), 0.75);
+      line-height: 1.45;
   }
-  .data-table-description-text { // Specifically for the description under title
-      font-size: 0.8rem; // Slightly smaller
+  .data-table-description-text {
+      font-size: 0.8rem;
       margin-top: 2px;
-      max-height: 3.9em; // Approx 3 lines with new line height
+      max-height: 3.9em;
       overflow: hidden;
       text-overflow: ellipsis;
-      // white-space: normal; // Keep this to allow wrapping for ellipsis
   }
   .data-table-chip {
-      // For tonal chips, Vuetify generally handles text color well based on chip color
-      // For flat chips, you might need to ensure text contrast
-      &.status-chip { // Example for flat status chip
-          color: rgb(var(--v-theme-on-primary)) !important; // Assuming status colors are dark enough
-           // If a status color is light (e.g. light yellow), text should be dark
-           // &.v-chip--variant-flat[style*="background-color: yellow"] { color: black !important; }
+      &.status-chip {
+          color: rgb(var(--v-theme-on-primary)) !important;
       }
   }
-
   .action-icons .v-btn {
       color: rgba(var(--v-theme-on-surface-rgb), 0.65);
       &:hover {
           color: rgb(var(--v-theme-primary));
       }
   }
-  .action-icons .v-btn[color="primary"] {
-    // Theme color is already primary, hover will be handled by general .v-btn hover or can be specified
-  }
   .action-icons .v-btn[color="error"] {
      &:hover {
-       color: rgb(var(--v-theme-error)) !important; // Or define error-darken-1
+       color: rgb(var(--v-theme-error)) !important;
      }
   }
 }
-
 .empty-state-content, .initializing-placeholder {
   display: flex;
   flex-direction: column;
@@ -461,16 +475,10 @@ onMounted(() => {
   flex-grow: 1;
   color: rgb(var(--v-theme-on-surface));
 }
-
 .empty-state-content .text-h6, .empty-state-content .text-body-2 {
    color: rgba(var(--v-theme-on-surface-rgb), 0.8);
 }
-.empty-state-content .text-disabled { // For consistency, if you use it
-   color: rgba(var(--v-theme-on-surface-rgb), 0.5);
-}
-
 .initializing-placeholder .text-medium-emphasis {
    color: rgba(var(--v-theme-on-surface-rgb), 0.7);
 }
-
 </style>

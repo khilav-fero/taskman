@@ -1,66 +1,73 @@
 <template>
-  <v-container fluid class="pa-4 user-list-view-container"> 
-    <div class="d-flex justify-space-between align-center mb-5 flex-shrink-0 flex-wrap ga-2">
+  <v-container fluid class="pa-4 user-list-view-container">
+    <div class="d-flex justify-space-between align-center mb-5 flex-shrink-0">
       <h1 class="text-h5 font-weight-medium header-title">USERS</h1>
-      <v-btn v-if="isAdmin" color="primary" @click="openCreateDialog" prepend-icon="mdi-plus" variant="flat" class="add-user-btn">
-        Add User
-      </v-btn>
     </div>
 
     <v-card
-      :loading="usersStore.getUsersLoading || usersStore.getFormLoading"
+      :loading="usersLoading || formSubmitting"
       variant="outlined"
-      class="d-flex flex-column card-container" 
+      class="d-flex flex-column card-container"
       :color="$vuetify.theme.current.colors.surface"
     >
       <div class="card-header-section flex-shrink-0">
-        <v-card-text class="pb-0 pt-4">
-          <v-row dense align="center" class="mb-3">
-            <v-col cols="12" md="auto" sm="6" class="flex-grow-1 flex-sm-grow-0">
-              <v-select
-                  v-model="selectedRolesFilter"
-                  :items="availableRolesForFilter"
-                  item-title="title"
-                  item-value="value"
-                  label="Filter by Role"
-                  multiple
-                  chips
-                  clearable
-                  closable-chips
-                  density="compact"
-                  variant="outlined"
-                  hide-details
-                  color="primary"
-                  class="filter-control"
-              ></v-select>
+        <v-card-text class="filter-section-padding">
+          <v-row dense align="center" justify="space-between" class="filter-row">
+            <v-col cols="auto" sm="auto" md="auto" class="d-flex flex-wrap ga-3 filter-controls-left">
+              <div class="filter-item">
+                <v-select
+                    v-model="selectedRolesFilter"
+                    :items="availableRolesForFilter"
+                    item-title="title"
+                    item-value="value"
+                    label="Filter by Role"
+                    multiple
+                    chips
+                    clearable
+                    closable-chips
+                    density="comfortable"
+                    variant="outlined"
+                    hide-details="auto"
+                    color="primary"
+                    class="filter-control themed-input"
+                    bg-color="surface"
+                ></v-select>
+              </div>
+              <div class="filter-item">
+                <v-text-field
+                    v-model="searchFilter"
+                    label="Search Users"
+                    prepend-inner-icon="mdi-magnify"
+                    variant="outlined"
+                    density="comfortable"
+                    hide-details="auto"
+                    clearable
+                    color="primary"
+                    class="filter-control themed-input"
+                    bg-color="surface"
+                ></v-text-field>
+              </div>
             </v-col>
-            <v-col cols="12" md="auto" sm="6" class="flex-grow-1 flex-sm-grow-0">
-              <v-text-field
-                  v-model="searchFilter"
-                  label="Search Users (Username, Email, Name)"
-                  prepend-inner-icon="mdi-magnify"
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  clearable
-                  color="primary"
-                  class="filter-control"
-              ></v-text-field>
+
+            <v-col cols="auto" sm="auto" md="auto" class="add-user-col">
+              <v-btn v-if="isAdmin" color="primary" @click="openCreateDialog" prepend-icon="mdi-plus" variant="flat" class="add-user-btn">
+                Add User
+              </v-btn>
             </v-col>
           </v-row>
         </v-card-text>
 
         <v-alert
-          v-if="showListError"
+          v-if="showListErrorAlert"
           type="error"
           variant="tonal"
           closable
-          class="ma-2 flex-shrink-0"
+          class="mx-4 my-2 flex-shrink-0"
           density="compact"
           title="Error Loading Users"
-          @update:modelValue="usersStore.clearUsersError()"
+          @update:modelValue="clearUsersError"
         >
-          {{ usersStore.getUsersError }}
+          {{ usersError }}
         </v-alert>
       </div>
 
@@ -70,13 +77,13 @@
             v-if="initialDataLoadedAndHasUsers"
             :headers="dataTableHeaders"
             :items="filteredUserListData"
-            :loading="usersStore.getUsersLoading"
+            :loading="usersLoading"
             :items-per-page="itemsPerPage"
             :sort-by="initialSortBy"
             item-value="id"
-            class="user-data-table" 
+            class="user-data-table"
             fixed-header
-            height="100%" 
+            height="100%"
             density="comfortable"
             hover
             :no-data-text="noDataText"
@@ -110,7 +117,7 @@
                       variant="text"
                       color="primary"
                       @click.stop="openEditDialog(item)"
-                      :disabled="usersStore.getFormLoading"
+                      :disabled="formSubmitting"
                       class="mr-1"
                       :aria-label="'Edit user ' + item.username"
                     />
@@ -120,13 +127,13 @@
                   <template v-slot:activator="{ props: tooltip }">
                     <v-btn
                       v-bind="tooltip"
-                      v-if="isAdmin && currentUser?.id !== item.id"
+                      v-if="isAdmin && (injectedCurrentUser && injectedCurrentUser.id !== item.id)"
                       icon="mdi-delete-outline"
                       size="small"
                       variant="text"
                       color="error"
                       @click.stop="openDeleteDialog(item)"
-                      :disabled="usersStore.getFormLoading"
+                      :disabled="formSubmitting"
                       :aria-label="'Delete user ' + item.username"
                     />
                   </template>
@@ -158,7 +165,7 @@
           </div>
         </template>
 
-        <div v-else-if="!usersStore.getUsersLoading && !showListError" class="initializing-placeholder">
+        <div v-else-if="!usersLoading && !showListErrorAlert" class="initializing-placeholder">
           <v-progress-circular indeterminate color="primary" size="40"/>
           <span class="ml-3 data-table-secondary-text">Loading User Data...</span>
         </div>
@@ -166,7 +173,7 @@
     </v-card>
 
     <v-dialog v-model="showFormDialog" persistent max-width="550px" @keydown.esc="closeDialog">
-      <v-card :loading="usersStore.getFormLoading" :color="$vuetify.theme.current.colors.surface">
+      <v-card :loading="formSubmitting" :color="$vuetify.theme.current.colors.surface">
         <v-toolbar color="primary" flat>
             <v-toolbar-title class="text-h6 font-weight-medium">{{ isEditing ? 'Edit User' : 'Create New User' }}</v-toolbar-title>
             <v-spacer/>
@@ -174,14 +181,14 @@
         </v-toolbar>
         <v-card-text class="pt-6 pb-4 px-6">
           <v-alert
-             v-if="usersStore.getFormError"
+             v-if="formError"
              type="error" variant="tonal" closable density="compact" class="mb-5"
              title="Error"
-             @update:modelValue="usersStore.clearFormError()"
+             @update:modelValue="clearFormError"
           >
-             {{ usersStore.getFormError }}
+             {{ formError }}
           </v-alert>
-          <v-form ref="userForm" @submit.prevent="saveUser">
+          <v-form ref="userFormRef" @submit.prevent="saveUser">
               <v-row dense>
                   <v-col cols="12" sm="6">
                      <v-text-field
@@ -224,7 +231,7 @@
                     <v-select
                         v-model="form.role"
                         label="Role*"
-                        :items="roleChoicesForSelect"
+                        :items="availableRolesForFilter"
                          item-title="title" item-value="value"
                         variant="outlined" density="comfortable"
                         :rules="[rules.required]"
@@ -265,14 +272,14 @@
         <v-divider/>
         <v-card-actions class="pa-4">
           <v-spacer />
-          <v-btn variant="text" @click="closeDialog" :disabled="usersStore.getFormLoading" class="data-table-secondary-text">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" @click="saveUser" :loading="usersStore.getFormLoading" class="add-user-btn font-weight-bold">{{ isEditing ? 'Save Changes' : 'Create User' }}</v-btn>
+          <v-btn variant="text" @click="closeDialog" :disabled="formSubmitting" class="data-table-secondary-text">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" @click="saveUser" :loading="formSubmitting" class="add-user-btn font-weight-bold">{{ isEditing ? 'Save Changes' : 'Create User' }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-dialog v-model="showDeleteDialog" persistent max-width="450px" @keydown.esc="closeDeleteDialog">
-      <v-card :loading="usersStore.getFormLoading" :color="$vuetify.theme.current.colors.surface">
+      <v-card :loading="formSubmitting" :color="$vuetify.theme.current.colors.surface">
          <v-card-title class="text-h5 font-weight-medium d-flex align-center" :style="{ color: $vuetify.theme.current.colors.error }">
             <v-icon start :color="$vuetify.theme.current.colors.error">mdi-alert-circle-outline</v-icon>
             Confirm Deletion
@@ -284,18 +291,18 @@
             <br/>
             <strong :style="{ color: $vuetify.theme.current.colors.error }">This action cannot be undone.</strong>
             <v-alert
-                v-if="usersStore.getFormError"
+                v-if="formError"
                 type="error" variant="tonal" closable density="compact" class="mt-4"
                  title="Error"
-                @update:modelValue="usersStore.clearFormError()"
+                @update:modelValue="clearFormError"
              >
-                {{ usersStore.getFormError }}
+                {{ formError }}
              </v-alert>
         </v-card-text>
         <v-card-actions class="pa-3">
           <v-spacer />
-          <v-btn variant="text" @click="closeDeleteDialog" :disabled="usersStore.getFormLoading" class="data-table-secondary-text">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="confirmDeleteUser" :loading="usersStore.getFormLoading" class="font-weight-bold">Delete User</v-btn>
+          <v-btn variant="text" @click="closeDeleteDialog" :disabled="formSubmitting" class="data-table-secondary-text">Cancel</v-btn>
+          <v-btn color="error" variant="flat" @click="confirmDeleteUser" :loading="formSubmitting" class="font-weight-bold">Delete User</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -303,23 +310,27 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, reactive } from 'vue';
-import { useUsersStore } from '@/store/users';
-import { useAuthStore } from '@/store/auth';
-import { roleChoicesForSelect } from '@/lib/choices';
+import { ref, onMounted, computed, reactive, inject } from 'vue';
+import { fetchAllUsers, createUserApi, updateUserApi, deleteUserApi } from '@/services/userService';
+import { roleChoicesForSelect } from '@/lib/choices'; // Assuming this path and content
 
-const usersStore = useUsersStore();
-const authStore = useAuthStore();
+const injectedCurrentUser = inject('currentUser', ref(null));
 
 const componentReady = ref(false);
-const itemsPerPage = ref(15);
+const itemsPerPage = ref(10); // Adjusted from 5 for more visibility
 const initialSortBy = ref([{ key: 'username', order: 'asc' }]);
+
+const usersList = ref([]);
+const usersLoading = ref(false);
+const usersError = ref(null);
+const formSubmitting = ref(false);
+const formError = ref(null);
 
 const showFormDialog = ref(false);
 const showDeleteDialog = ref(false);
 
 const isEditing = ref(false);
-const userForm = ref(null);
+const userFormRef = ref(null); // Changed from userForm to avoid conflict with reactive form
 const form = reactive({
   id: null,
   username: '',
@@ -351,15 +362,15 @@ const dataTableHeaders = ref([
   { title: 'Actions', key: 'actions', sortable: false, align: 'center', width: '10%' }
 ]);
 
-const availableRolesForFilter = computed(() => roleChoicesForSelect);
+const availableRolesForFilter = computed(() => {
+  return roleChoicesForSelect;
+});
 
 const filteredUserListData = computed(() => {
-    let users = usersStore.getUserList || [];
-
+    let users = usersList.value || [];
     if (selectedRolesFilter.value && selectedRolesFilter.value.length > 0) {
         users = users.filter(user => user.profile?.role && selectedRolesFilter.value.includes(user.profile.role));
     }
-
     const searchTerm = searchFilter.value?.trim().toLowerCase();
     if (searchTerm) {
         users = users.filter(user => {
@@ -373,25 +384,21 @@ const filteredUserListData = computed(() => {
     return users;
 });
 
-
-const showListError = computed(() => !!usersStore.getUsersError && !usersStore.getUsersLoading);
-
-const showTableLayout = computed(() => componentReady.value && !usersStore.getUsersLoading && !showListError.value);
-const initialDataLoadedAndHasUsers = computed(() => (usersStore.getUserList || []).length > 0);
+const showListErrorAlert = computed(() => !!usersError.value && !usersLoading.value);
+const showTableLayout = computed(() => componentReady.value && !usersLoading.value && !showListErrorAlert.value);
+const initialDataLoadedAndHasUsers = computed(() => (usersList.value || []).length > 0);
 const hasActiveFilters = computed(() => (selectedRolesFilter.value && selectedRolesFilter.value.length > 0) || !!searchFilter.value);
 
-
 const noDataText = computed(() => {
-    if (usersStore.getUsersLoading && !componentReady.value) return 'Loading users...';
+    if (usersLoading.value && !componentReady.value) return 'Loading users...';
     if (!initialDataLoadedAndHasUsers.value && !hasActiveFilters.value) return 'No users exist in the system.';
     if (hasActiveFilters.value) return 'No users match the current filters.';
     if (!initialDataLoadedAndHasUsers.value) return 'No users found.';
     return 'No data available.';
 });
 
-
-const isAdmin = computed(() => authStore.userRole === 'ADMIN');
-const currentUser = computed(() => authStore.getUser);
+const userRole = computed(() => injectedCurrentUser.value?.profile?.role || null);
+const isAdmin = computed(() => userRole.value === 'ADMIN');
 
 const getRoleColor = (role) => {
   if (role === 'ADMIN') return 'error';
@@ -409,13 +416,13 @@ const resetForm = () => {
   form.role = null;
   form.password = '';
   form.passwordConfirm = '';
-  userForm.value?.resetValidation();
+  userFormRef.value?.resetValidation();
 };
 
 const openCreateDialog = () => {
   isEditing.value = false;
   resetForm();
-  usersStore.clearFormError();
+  formError.value = null;
   showFormDialog.value = true;
 };
 
@@ -428,36 +435,35 @@ const openEditDialog = (user) => {
   form.email = user.email;
   form.first_name = user.first_name || '';
   form.last_name = user.last_name || '';
-  form.role = user.profile?.role || null;
-  usersStore.clearFormError();
+  form.role = user.profile?.role || null; // Make sure this reflects API structure
+  formError.value = null;
   showFormDialog.value = true;
 };
 
 const openDeleteDialog = (user) => {
   if (!user) return;
   userToDelete.value = { ...user };
-  usersStore.clearFormError();
+  formError.value = null;
   showDeleteDialog.value = true;
 };
 
 const closeDialog = () => {
   showFormDialog.value = false;
-  usersStore.clearFormError();
+  formError.value = null;
 };
 
 const closeDeleteDialog = () => {
   showDeleteDialog.value = false;
   userToDelete.value = null;
-  usersStore.clearFormError();
+  formError.value = null;
 };
 
 const saveUser = async () => {
-  const { valid } = await userForm.value?.validate();
-  if (!valid) {
-      return;
-  }
+  const { valid } = await userFormRef.value?.validate();
+  if (!valid) return;
 
-  usersStore.clearFormError();
+  formSubmitting.value = true;
+  formError.value = null;
   let success = false;
 
   const userData = {
@@ -465,8 +471,9 @@ const saveUser = async () => {
     email: form.email,
     first_name: form.first_name || undefined,
     last_name: form.last_name || undefined,
-    profile: { role: form.role },
+    profile_attributes: { role: form.role }, // Assuming backend expects role under profile_attributes for create/update
   };
+
   if (!isEditing.value) {
     userData.password = form.password;
   }
@@ -474,50 +481,70 @@ const saveUser = async () => {
   if (!userData.first_name) delete userData.first_name;
   if (!userData.last_name) delete userData.last_name;
 
-
   try {
     if (isEditing.value) {
       if (!form.id) return;
-      success = await usersStore.updateUserAction(form.id, userData);
+      // For update, usually only changed fields are sent.
+      // And password is not sent unless changing. Role update might be separate.
+      // Here, we send all, assuming API handles partial updates or specific role update.
+      // If API expects only 'role' under 'profile_attributes', adjust accordingly for updates.
+      await updateUserApi(form.id, userData);
     } else {
-      success = await usersStore.createUserAction(userData);
+      await createUserApi(userData);
     }
+    success = true;
+  } catch (err) {
+    formError.value = err?.detail || err?.message || (Array.isArray(err) ? err.join('; ') : 'Operation failed.');
+    console.error(`Failed to ${isEditing.value ? 'update' : 'create'} user:`, err);
+  } finally {
+    formSubmitting.value = false;
+  }
 
-    if (success) {
-      closeDialog();
-      await loadUsers();
-    }
-  } catch (error) {
-    console.error(`Failed to ${isEditing.value ? 'update' : 'create'} user:`, error);
+  if (success) {
+    closeDialog();
+    await loadUsers();
   }
 };
 
 const confirmDeleteUser = async () => {
   if (!userToDelete.value?.id) return;
-
-  usersStore.clearFormError();
+  formSubmitting.value = true;
+  formError.value = null;
   try {
-    const success = await usersStore.deleteUserAction(userToDelete.value.id);
-    if (success) {
-      closeDeleteDialog();
-      await loadUsers();
-    }
-  } catch (error) {
-    console.error("Failed to delete user:", error);
+    await deleteUserApi(userToDelete.value.id);
+    closeDeleteDialog();
+    await loadUsers();
+  } catch (err) {
+    formError.value = err?.detail || err?.message || 'Failed to delete user.';
+    console.error("Failed to delete user:", err);
+  } finally {
+    formSubmitting.value = false;
   }
 };
 
 const loadUsers = async () => {
-  if(!componentReady.value) usersStore.clearUsersError?.();
+  usersLoading.value = true;
+  usersError.value = null;
   try {
-    await usersStore.fetchUsersAction();
-  } catch (error) {
-    console.error('UserListView: Could not load users.', error);
+    const fetchedUsers = await fetchAllUsers();
+    usersList.value = fetchedUsers; // Assuming fetchAllUsers returns the array directly
+  } catch (err) {
+    usersError.value = err?.detail || err?.message || 'Could not load users.';
+    usersList.value = [];
+    console.error('UserListView: Could not load users.', err);
   } finally {
+    usersLoading.value = false;
     if (!componentReady.value) {
        componentReady.value = true;
     }
   }
+};
+
+const clearUsersError = () => {
+  usersError.value = null;
+};
+const clearFormError = () => {
+  formError.value = null;
 };
 
 onMounted(() => {
@@ -528,64 +555,115 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .user-list-view-container {
-  height: 100vh; /* Make the container take full viewport height */
+  height: 100vh;
   display: flex;
   flex-direction: column;
-
 }
-
 .card-header-section {
   flex-shrink: 0;
+  padding: 16px 20px 4px 20px;
 }
-
-/*
-  The v-card (.card-container) will be the main element that expands
-  to fill the space left by the top title/button row.
-  Its parent (.user-list-view-container) defines the overall boundary.
-*/
+.card-content-area {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .card-container {
   border: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.12);
   display: flex;
   flex-direction: column;
-  flex-grow: 1; /* Allows this card to take up remaining space */
-  min-height: 0; /* Important for flex children to not overflow in some browsers */
-  overflow: hidden; /* All internal scrolling will be handled by v-data-table */
-}
-
-/*
-  This new wrapper directly contains the v-data-table or empty/loading states.
-  It will grow within the v-card, and v-data-table's height="100%" will refer to this.
-*/
-.table-and-state-wrapper {
   flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  position: relative; /* For v-data-table's internal absolute positioning to work well */
-  overflow: hidden; /* Child (v-data-table) will handle its own scroll */
+  min-height: 0;
+  overflow: hidden;
 }
-
 .header-title {
   color: rgb(var(--v-theme-on-background));
 }
-
 .add-user-btn {
   color: rgb(var(--v-theme-on-primary));
 }
-
-.filter-control {
-  max-width: 320px;
+.filter-row {
 }
-
+.filter-controls-left {
+  flex-grow: 1;
+  justify-content: flex-start;
+}
+.add-user-col {
+  flex-grow: 0;
+  display: flex;
+  align-items: center;
+}
+.filter-item {
+  max-width: 260px;
+  min-width: 220px;
+  flex-basis: 260px;
+  flex-grow: 1;
+}
+.filter-control {
+  width: 100%;
+  background-color: rgb(var(--v-theme-surface)) !important;
+  border-radius: 6px;
+  :deep(.v-field) {
+      background-color: transparent !important;
+      border-radius: 8px;
+      transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
+      box-shadow: 0 1px 2px 0 rgba(var(--v-theme-on-surface-rgb), 0.03);
+  }
+  :deep(.v-field__outline) {
+    color: rgba(var(--v-theme-on-surface-rgb), 0.30) !important;
+    border-width: 1px;
+    opacity: 1 !important;
+    transition: border-color 0.2s ease-in-out;
+  }
+   &:hover :deep(.v-field__outline) {
+      color: rgba(var(--v-theme-on-surface-rgb), 0.55) !important;
+   }
+   &.v-input--is-focused :deep(.v-field__outline){
+       border-color: rgb(var(--v-theme-primary)) !important;
+       border-width: 1px !important;
+       box-shadow: 0 0 0 2.5px rgba(var(--v-theme-primary-rgb), 0.2);
+   }
+   &.v-input--is-focused :deep(.v-field) {
+      box-shadow: 0 1px 3px 0 rgba(var(--v-theme-on-surface-rgb), 0.06);
+   }
+  :deep(.v-label.v-field-label) {
+    color: rgba(var(--v-theme-on-surface-rgb), 0.68) !important;
+    opacity: 1;
+    font-weight: 400;
+  }
+   :deep(.v-field--active .v-label.v-field-label) {
+        color: rgb(var(--v-theme-primary)) !important;
+        font-weight: 500;
+    }
+  :deep(input), :deep(.v-select__selection-text) {
+    color: rgb(var(--v-theme-on-surface)) !important;
+    font-weight: 400;
+  }
+   :deep(.v-select__selection .v-chip) {
+    background-color: rgba(var(--v-theme-primary-rgb), 0.15) !important;
+    color: rgb(var(--v-theme-primary)) !important;
+    font-weight: 500;
+    height: 28px;
+    .v-icon {
+        color: rgb(var(--v-theme-primary)) !important;
+        font-size: 1rem;
+    }
+  }
+   :deep(.v-field__input::placeholder){
+       color: rgba(var(--v-theme-on-surface-rgb), 0.45) !important;
+       opacity: 1;
+       font-weight: 400;
+   }
+    :deep(.v-field__prepend-inner .v-icon){
+        color: rgba(var(--v-theme-on-surface-rgb), 0.55) !important;
+    }
+}
 .user-data-table {
-  /* height: 100% is now a prop on v-data-table */
-  /* flex-grow: 1 is removed as height="100%" with proper parent handles it */
   color: rgb(var(--v-theme-on-surface));
-
   :deep(.v-table__wrapper) {
-    /* v-data-table with height="100%" will manage its wrapper height */
-    /* We ensure overflow-y is auto so it scrolls if content exceeds its calculated 100% */
     overflow-y: auto;
-    height: 100%; /* Added this for good measure */
+    height: 100%;
   }
   :deep(thead th) {
     position: sticky;
@@ -610,11 +688,10 @@ onMounted(() => {
       font-size: 0.875rem;
   }
    :deep(.v-data-table-footer) {
-      flex-shrink: 0; // Prevent footer from shrinking
+      flex-shrink: 0;
       border-top: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.15) !important;
       color: rgba(var(--v-theme-on-surface-rgb), 0.7) !important;
   }
-
   .data-table-primary-text {
       color: rgb(var(--v-theme-on-surface));
       line-height: 1.4;
@@ -643,7 +720,6 @@ onMounted(() => {
      }
   }
 }
-
 .empty-state-content,
 .initializing-placeholder {
   display: flex;
@@ -661,7 +737,6 @@ onMounted(() => {
 .initializing-placeholder .text-medium-emphasis {
    color: rgba(var(--v-theme-on-surface-rgb), 0.7) !important;
 }
-
 :deep(.v-dialog .v-toolbar-title) {
     color: rgb(var(--v-theme-on-primary));
 }

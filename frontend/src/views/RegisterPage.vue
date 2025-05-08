@@ -4,7 +4,7 @@
       <v-col cols="12" sm="8" md="6" lg="5" xl="4">
         <v-card class="register-card" elevation="12" :color="$vuetify.theme.current.colors.surface">
           <v-progress-linear
-            :active="authStore.getLoading"
+            :active="loading"
             indeterminate
             color="primary"
             absolute
@@ -18,17 +18,17 @@
           <v-card-text class="pa-6">
             <v-form @submit.prevent="handleRegister">
               <v-alert
-                v-if="authStore.getError"
+                v-if="apiErrorMessages.length > 0"
                 type="error"
                 variant="tonal"
                 closable
                 density="compact"
                 class="mb-5"
-                @update:modelValue="clearError"
-                :title="formattedErrorTitle"
+                @update:modelValue="clearApiErrorMessages"
+                title="Registration Error"
               >
                 <div
-                  v-for="(msg, index) in formattedErrorMessages"
+                  v-for="(msg, index) in apiErrorMessages"
                   :key="index"
                   class="text-caption"
                 >
@@ -121,8 +121,8 @@
                 <v-btn
                   type="submit"
                   color="primary"
-                  :loading="authStore.getLoading"
-                  :disabled="v$.$invalid || authStore.getLoading"
+                  :loading="loading"
+                  :disabled="v$.$invalid || loading"
                   size="large"
                   variant="flat"
                   class="register-button font-weight-bold"
@@ -139,12 +139,12 @@
 </template>
 
 <script setup>
-import { reactive, computed } from 'vue';
-import { useAuthStore } from '@/store/auth';
+import { reactive, computed, ref } from 'vue';
 import { useVuelidate } from '@vuelidate/core';
 import { required, email, minLength, sameAs, helpers } from '@vuelidate/validators';
+import { registerUserApi } from '@/services/authService';
 
-const authStore = useAuthStore();
+const emit = defineEmits(['registration-success', 'registration-failure']);
 
 const formData = reactive({
   username: '',
@@ -154,6 +154,9 @@ const formData = reactive({
   first_name: '',
   last_name: ''
 });
+
+const loading = ref(false);
+const apiErrorMessages = ref([]);
 
 const passwordValue = computed(() => formData.password);
 
@@ -177,45 +180,47 @@ const rules = computed(() => ({
 
 const v$ = useVuelidate(rules, formData);
 
-const formattedErrorMessages = computed(() => {
-  const error = authStore.getError;
-  if (!error) return [];
-  if (typeof error === 'string' && error.startsWith('Registration failed: ')) {
-    return error.substring('Registration failed: '.length).split('; ').map(e => e.trim()).filter(Boolean);
-  }
-  if (typeof error === 'object' && error !== null) {
-    // Handle DRF validation errors which are often objects
-    return Object.entries(error).flatMap(([key, messages]) =>
-      Array.isArray(messages) ? messages.map(msg => `${key.replace("_", " ")}: ${msg}`) : [`${key.replace("_", " ")}: ${messages}`]
-    );
-  }
-  return [String(error)]; // Fallback for other error types
-});
-
-const formattedErrorTitle = computed(() => {
-  return authStore.getError ? 'Registration Error' : '';
-});
-
 const handleRegister = async () => {
   const isValid = await v$.value.$validate();
   if (!isValid) return;
+
+  loading.value = true;
+  apiErrorMessages.value = [];
 
   const payload = {
     username: formData.username,
     email: formData.email,
     password: formData.password,
-    first_name: formData.first_name || undefined,
-    last_name: formData.last_name || undefined
+    profile: { // Assuming your backend expects profile data nested for first/last name
+        first_name: formData.first_name || undefined,
+        last_name: formData.last_name || undefined
+    }
   };
-  // Remove empty optional fields so they aren't sent as empty strings
-  if (!payload.first_name) delete payload.first_name;
-  if (!payload.last_name) delete payload.last_name;
 
-  await authStore.register(payload);
+  if (!payload.profile.first_name) delete payload.profile.first_name;
+  if (!payload.profile.last_name) delete payload.profile.last_name;
+  if (Object.keys(payload.profile).length === 0) delete payload.profile;
+
+
+  try {
+    await registerUserApi(payload);
+    emit('registration-success');
+  } catch (error) {
+    if (Array.isArray(error)) {
+      apiErrorMessages.value = error;
+    } else if (error && error.message) {
+      apiErrorMessages.value = [error.message];
+    } else {
+      apiErrorMessages.value = ['An unexpected error occurred. Please try again.'];
+    }
+    emit('registration-failure', error);
+  } finally {
+    loading.value = false;
+  }
 };
 
-const clearError = () => {
-  authStore.error = null;
+const clearApiErrorMessages = () => {
+  apiErrorMessages.value = [];
 };
 </script>
 
@@ -223,38 +228,25 @@ const clearError = () => {
 .fill-height {
   min-height: 100vh;
 }
-
 .themed-background {
-  // background-color: rgb(var(--v-theme-background)); // Generally handled by v-app
 }
-
 .register-card {
   border-radius: 12px;
-  // color: rgb(var(--v-theme-on-surface)); // Text color if not inherited well
 }
-
 .v-toolbar-title {
   color: rgb(var(--v-theme-on-primary));
 }
-
 .account-link {
   color: rgba(var(--v-theme-on-surface-rgb), 0.7);
   text-decoration: none;
   transition: color 0.2s ease-in-out;
-
   &:hover {
     color: rgb(var(--v-theme-primary));
     text-decoration: underline;
   }
 }
-
 .register-button {
   color: rgb(var(--v-theme-on-primary));
   min-width: 120px;
 }
-
-// :deep(.v-field__input::placeholder) {
-//   color: rgba(var(--v-theme-on-surface-rgb), 0.6) !important;
-//   opacity: 1;
-// }
 </style>

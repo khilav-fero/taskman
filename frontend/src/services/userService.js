@@ -1,4 +1,4 @@
-import apiClient from './api'; // Corrected import to match previous use
+import apiClient from './api';
 
 export async function fetchAllUsers() {
   try {
@@ -13,7 +13,7 @@ export async function fetchAllUsers() {
 export async function createUserApi(userData) {
     try {
         const response = await apiClient.post('/users/', userData);
-        return response.data;h
+        return response.data;
     } catch (error) {
         console.error("API Error creating user:", error.response?.data || error);
         throw error;

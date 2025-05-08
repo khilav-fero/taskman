@@ -4,7 +4,7 @@
       <v-col cols="12" sm="8" md="6" lg="4" xl="3">
         <v-card class="login-card" elevation="12" :color="$vuetify.theme.current.colors.surface">
           <v-progress-linear
-            :active="authStore.getLoading"
+            :active="loading"
             indeterminate
             color="primary"
             absolute
@@ -18,7 +18,7 @@
           <v-card-text class="pa-6">
             <v-form @submit.prevent="handleLogin">
               <v-alert
-                v-if="authStore.getError"
+                v-if="errorMessage"
                 type="error"
                 variant="tonal"
                 closable
@@ -27,7 +27,7 @@
                 @update:modelValue="clearError"
                 title="Login Error"
               >
-                {{ authStore.getError }}
+                {{ errorMessage }}
               </v-alert>
 
               <v-text-field
@@ -66,8 +66,8 @@
 
                 <v-btn
                   type="submit"
-                  :loading="authStore.getLoading"
-                  :disabled="v$.$invalid || authStore.getLoading"
+                  :loading="loading"
+                  :disabled="v$.$invalid || loading"
                   size="large"
                   variant="flat"
                   color="primary"
@@ -85,17 +85,20 @@
 </template>
 
 <script setup>
-import { reactive, computed } from 'vue';
-import { useAuthStore } from '@/store/auth';
+import { reactive, computed, ref } from 'vue';
 import { useVuelidate } from '@vuelidate/core';
 import { required, helpers } from '@vuelidate/validators';
+import { loginUserApi } from '@/services/authService';
 
-const authStore = useAuthStore();
+const emit = defineEmits(['login-success', 'login-failure']);
 
 const formData = reactive({
   username: '',
   password: '',
 });
+
+const loading = ref(false);
+const errorMessage = ref(null);
 
 const rules = computed(() => ({
   username: { required: helpers.withMessage('Username is required', required) },
@@ -108,59 +111,63 @@ const handleLogin = async () => {
   const isValid = await v$.value.$validate();
   if (!isValid) return;
 
-  await authStore.login({
-    username: formData.username,
-    password: formData.password
-  });
+  loading.value = true;
+  errorMessage.value = null;
+
+  try {
+    const responseData = await loginUserApi({
+      username: formData.username,
+      password: formData.password
+    });
+    emit('login-success', responseData);
+  } catch (error) {
+    const apiError = error;
+    if (apiError && apiError.non_field_errors && Array.isArray(apiError.non_field_errors)) {
+        errorMessage.value = apiError.non_field_errors.join(' ');
+    } else if (apiError && apiError.detail) {
+        errorMessage.value = apiError.detail;
+    } else if (typeof apiError === 'string') {
+        errorMessage.value = apiError;
+    } else if (apiError && typeof apiError === 'object' && Object.keys(apiError).length > 0) {
+        errorMessage.value = Object.entries(apiError).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`).join('; ');
+    }
+    else {
+        errorMessage.value = 'Login failed. Please check your credentials or try again later.';
+    }
+    emit('login-failure', errorMessage.value);
+  } finally {
+    loading.value = false;
+  }
 };
 
 const clearError = () => {
-  authStore.error = null;
+  errorMessage.value = null;
 };
 </script>
 
 <style lang="scss" scoped>
 .fill-height {
-  min-height: 100vh; // Ensure it covers the viewport if content is short
+  min-height: 100vh;
 }
-
 .themed-background {
-  // Vuetify 3 applies theme background to v-app, so this can often be removed
-  // or set to transparent if v-app handles it.
-  // If you see issues, explicitly set:
-  // background-color: rgb(var(--v-theme-background));
 }
-
 .login-card {
   border-radius: 12px;
-  // The surface color is applied via :color prop directly on v-card
-  // color: rgb(var(--v-theme-on-surface)); // for text on the card, if not inherited well
 }
-
 .v-toolbar-title {
   color: rgb(var(--v-theme-on-primary));
 }
-
 .registration-link {
   color: rgba(var(--v-theme-on-surface-rgb), 0.7);
   text-decoration: none;
   transition: color 0.2s ease-in-out;
-
   &:hover {
     color: rgb(var(--v-theme-primary));
     text-decoration: underline;
   }
 }
-
 .login-button {
-  color: rgb(var(--v-theme-on-primary)); // Ensure text color contrasts with primary button
-  min-width: 120px; // Give the button a bit more presence
+  color: rgb(var(--v-theme-on-primary));
+  min-width: 120px;
 }
-
-// General adjustments for text fields in dark theme if needed
-// For example, if placeholder text is hard to see:
-// :deep(.v-field__input::placeholder) {
-//   color: rgba(var(--v-theme-on-surface-rgb), 0.6) !important;
-//   opacity: 1;
-// }
 </style>
