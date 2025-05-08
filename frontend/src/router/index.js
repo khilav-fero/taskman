@@ -1,24 +1,55 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
+const DefaultLayout = () => import('@/layouts/DefaultLayout.vue');
+
 const LoginPage = () => import('../views/LoginPage.vue');
 const RegisterPage = () => import('../views/RegisterPage.vue');
 const TaskListView = () => import('../views/TaskListView.vue');
-const UserListView = () => import('../views/UserListView.vue');
+const UserListView = () => import('../views/users/UserListView.vue');
+
 
 const routes = [
-  { path: '/', redirect: '/tasks' },
-  { path: '/login', name: 'Login', component: LoginPage, meta: { requiresGuest: true, hideSidebar: true } },
-  { path: '/register', name: 'Register', component: RegisterPage, meta: { requiresGuest: true, hideSidebar: true } },
-  { path: '/tasks', name: 'TaskList', component: TaskListView, meta: { requiresAuth: true } },
   {
-    path: '/users',
-    name: 'UserList',
-    component: UserListView,
-    meta: {
-      requiresAuth: true,
-      requiresAdminOrManager: true,
-    },
+    path: '/login',
+    name: 'Login',
+    component: LoginPage,
+    meta: { requiresGuest: true, hideSidebar: true }
   },
+  {
+    path: '/register',
+    name: 'Register',
+    component: RegisterPage,
+    meta: { requiresGuest: true, hideSidebar: true }
+  },
+  {
+    path: '/',
+    component: DefaultLayout,
+    meta: { requiresAuth: true },
+    children: [
+      { path: '', redirect: '/tasks' },
+      {
+        path: 'tasks',
+        name: 'TaskList',
+        component: TaskListView,
+      },
+      {
+        path: 'users',
+        name: 'UserList',
+        component: UserListView,
+        meta: {
+          requiresAdminOrManager: true,
+        },
+      },
+    ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    redirect: () => {
+        const token = localStorage.getItem('authToken');
+        return token ? { name: 'TaskList' } : { name: 'Login' };
+    }
+  }
 ];
 
 const router = createRouter({
@@ -44,22 +75,19 @@ router.beforeEach(async (to, from, next) => {
 
   const needsAuth = to.matched.some(record => record.meta.requiresAuth);
   const needsGuest = to.matched.some(record => record.meta.requiresGuest);
-  const needsAdminOrManager = to.matched.some(record => record.meta.requiresAdminOrManager);
-
+  
   if (needsAuth && !isAuthenticated) {
     next({ name: 'Login', query: { redirect: to.fullPath } });
   } else if (needsGuest && isAuthenticated) {
     next({ name: 'TaskList' });
-  } else if (needsAdminOrManager) {
-    if (!isAuthenticated) {
-        next({ name: 'Login', query: { redirect: to.fullPath } });
-    } else if (!(userRole === 'ADMIN' || userRole === 'MANAGER')) {
-        next({ name: 'TaskList' });
-    } else {
-        next();
+  } else {
+    if (needsAuth && isAuthenticated) {
+        const needsAdminOrManager = to.matched.some(record => record.meta.requiresAdminOrManager);
+        if (needsAdminOrManager && !(userRole === 'ADMIN' || userRole === 'MANAGER')) {
+            next({ name: 'TaskList' });
+            return;
+        }
     }
-  }
-  else {
     next();
   }
 });

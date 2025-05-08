@@ -1,19 +1,19 @@
 <template>
-  <v-container fluid class="pa-4 task-list-view-container d-flex flex-column">
-    <div class="d-flex justify-space-between align-center mb-5 flex-shrink-0 flex-wrap ga-2">
-      <h1 class="text-h5 font-weight-medium header-title">TASKS</h1>
-      <div class="d-flex align-center flex-wrap ga-2">
+  <v-container fluid class="pa-md-6 pa-4 task-list-view-container d-flex flex-column">
+    <div class="d-flex justify-space-between align-center mb-6 flex-shrink-0 flex-wrap ga-3">
+      <h1 class="text-h4 font-weight-medium header-title">TASKS</h1>
+      <div class="d-flex align-center flex-wrap ga-sm-4 ga-3 task-list-actions">
         <v-text-field
           v-model="search"
           label="Search Tasks"
           prepend-inner-icon="mdi-magnify"
           variant="outlined"
-          density="compact"
+          density="comfortable"
           hide-details
           clearable
-          class="search-field"
-          style="min-width: 250px; max-width: 350px;"
+          class="search-field filter-control"
           color="primary"
+          bg-color="transparent"
         ></v-text-field>
         <v-btn
           v-if="canManageTasks"
@@ -21,7 +21,8 @@
           prepend-icon="mdi-plus"
           @click="openCreateDialog"
           variant="flat"
-          class="create-task-btn"
+          class="create-task-btn add-user-btn"
+          block-sm-and-down
         >
           Create Task
         </v-btn>
@@ -30,139 +31,149 @@
 
     <v-card
       :loading="tasksLoading"
-      variant="outlined"
+      variant="flat"
       class="flex-grow-1 d-flex flex-column card-container"
       :color="$vuetify.theme.current.colors.surface"
+      rounded="lg"
     >
-      <v-alert
-        v-if="showErrorAlert"
-        type="error"
-        variant="tonal"
-        closable
-        class="ma-2 flex-shrink-0"
-        density="compact"
-        title="Error Loading Tasks"
-        @update:modelValue="clearComponentError"
-      >
-        {{ tasksError }}
-      </v-alert>
-
-      <v-data-table
-        v-if="showTable"
-        v-model="selectedTasks"
-        :headers="dataTableHeaders"
-        :items="tasksList"
-        :search="search"
-        :loading="tasksLoading"
-        :items-per-page="itemsPerPage"
-        :sort-by="initialSortBy"
-        item-value="id"
-        show-select
-        class="flex-grow-1 task-data-table"
-        fixed-header
-        height="100%"
-        density="comfortable"
-        hover
-      >
-        <template v-slot:item.priority="{ item }">
-          <v-chip :color="getPriorityColor(item.priority)" size="small" label variant="tonal" class="font-weight-medium data-table-chip">
-            {{ formatPriority(item.priority) }}
-          </v-chip>
-        </template>
-        <template v-slot:item.assignee="{ item }">
-          <span class="data-table-secondary-text" :class="{'text-disabled': !item.assignee}">
-              {{ item.assignee?.username || 'Unassigned' }}
-          </span>
-        </template>
-        <template v-slot:item.creator="{ item }">
-           <span class="data-table-secondary-text">
-              {{ item.creator?.username || 'Unknown' }}
-           </span>
-        </template>
-        <template v-slot:item.deadline="{ item }">
-          <span class="data-table-secondary-text">
-              {{ item.deadline ? new Date(item.deadline + 'T00:00:00Z').toLocaleDateString() : '–' }}
-          </span>
-        </template>
-        <template v-slot:item.created_at="{ item }">
-           <span class="data-table-secondary-text">
-              {{ item.created_at ? new Date(item.created_at).toLocaleString() : '–' }}
-           </span>
-        </template>
-        <template v-slot:item.title="{ item }">
-          <div class="text-subtitle-1 font-weight-medium cell-title data-table-primary-text">{{ item.title }}</div>
-          <div v-if="item.description" class="text-caption cell-description data-table-description-text">
-            {{ item.description }}
-          </div>
-        </template>
-        <template v-slot:item.status="{item}">
-           <v-chip :color="getStatusColor(item.status)" size="small" label variant="flat" class="font-weight-bold text-uppercase data-table-chip status-chip">
-              {{ item.status }}
-           </v-chip>
-        </template>
-        <template v-slot:item.actions="{ item }">
-          <div class="action-icons">
-            <v-tooltip text="Edit Task" location="top">
-              <template v-slot:activator="{ props: tooltip }">
-                <v-btn
-                  v-bind="tooltip"
-                  v-if="canManageTasks"
-                  icon="mdi-pencil-outline"
-                  variant="text"
-                  size="small"
-                  @click.stop="openEditDialog(item)"
-                  color="primary"
-                  class="mr-1"
-                  :aria-label="'Edit task ' + item.title"
-                ></v-btn>
-              </template>
-            </v-tooltip>
-            <v-tooltip text="Delete Task" location="top">
-              <template v-slot:activator="{ props: tooltip }">
-                <v-btn
-                  v-bind="tooltip"
-                  v-if="canManageTasks"
-                  icon="mdi-delete-outline"
-                  variant="text"
-                  size="small"
-                  @click.stop="openDeleteDialog(item)"
-                  color="error"
-                  :aria-label="'Delete task ' + item.title"
-                ></v-btn>
-              </template>
-            </v-tooltip>
-          </div>
-        </template>
-        <template v-slot:loading>
-          <v-skeleton-loader type="table-row@10" :color="$vuetify.theme.current.colors.surface"></v-skeleton-loader>
-        </template>
-        <template v-slot:no-data>
-          <div class="text-center pa-6 text-medium-emphasis">
-            <v-icon size="48" class="mb-3" color="grey-lighten-1">mdi-text-box-search-outline</v-icon>
-            <div class="text-subtitle-1 data-table-primary-text">
-              <template v-if="search">No tasks found matching "{{ search }}".</template>
-              <template v-else>No tasks available.</template>
-            </div>
-             <p class="text-caption data-table-secondary-text" v-if="!search && canManageTasks">Try creating a new task to get started!</p>
-          </div>
-        </template>
-      </v-data-table>
-
-      <div
-        v-else-if="showEmptyState"
-        class="empty-state-content"
-      >
-        <v-icon size="64" :color="$vuetify.theme.current.colors.secondary" class="mb-4">mdi-view-list-outline</v-icon>
-        <p class="text-h6 font-weight-regular data-table-primary-text">No Tasks Yet</p>
-        <p class="text-body-2 data-table-secondary-text">Create your first task to get started.</p>
-         <v-btn v-if="canManageTasks" color="primary" @click="openCreateDialog" class="mt-4 create-task-btn">Create New Task</v-btn>
+      <div class="card-header-section flex-shrink-0">
+        <v-alert
+          v-if="showErrorAlert"
+          type="error"
+          variant="tonal"
+          closable
+          class="mx-4 my-4 flex-shrink-0"
+          density="compact"
+          border="start"
+          elevation="2"
+          prominent
+          icon="mdi-alert-circle-outline"
+          :title="tasksError ? 'Error Loading Tasks' : undefined"
+          @update:modelValue="clearComponentError"
+        >
+          {{ tasksError }}
+        </v-alert>
       </div>
-      <div
-        v-else-if="!tasksLoading && !showErrorAlert"
-        class="initializing-placeholder"
-      >
-        <v-progress-circular indeterminate color="primary" size="40"></v-progress-circular>
-        <span class="ml-3 data-table-secondary-text">Initializing Task List...</span>
+
+
+      <div class="table-and-state-wrapper flex-grow-1 d-flex flex-column">
+        <v-data-table
+          v-if="showTable"
+          v-model="selectedTasks"
+          :headers="dataTableHeaders"
+          :items="tasksList"
+          :search="search"
+          :loading="tasksLoading"
+          :items-per-page="itemsPerPage"
+          :sort-by="initialSortBy"
+          item-value="id"
+          show-select
+          class="flex-grow-1 task-data-table user-data-table"
+          fixed-header
+          height="100%"
+          density="comfortable"
+          hover
+        >
+          <template v-slot:item.priority="{ item }">
+            <v-chip :color="getPriorityColor(item.priority)" size="small" label variant="tonal" class="data-table-chip">
+              {{ formatPriority(item.priority) }}
+            </v-chip>
+          </template>
+          <template v-slot:item.assignee="{ item }">
+            <span class="data-table-text-secondary" :class="{'text-disabled': !item.assignee}">
+                {{ item.assignee?.username || 'Unassigned' }}
+            </span>
+          </template>
+          <template v-slot:item.creator="{ item }">
+             <span class="data-table-text-secondary">
+                {{ item.creator?.username || 'Unknown' }}
+             </span>
+          </template>
+          <template v-slot:item.deadline="{ item }">
+            <span class="data-table-text-secondary">
+                {{ item.deadline ? new Date(item.deadline + 'T00:00:00Z').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : '–' }}
+            </span>
+          </template>
+          <template v-slot:item.created_at="{ item }">
+             <span class="data-table-text-secondary">
+                {{ item.created_at ? new Date(item.created_at).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–' }}
+             </span>
+          </template>
+          <template v-slot:item.title="{ item }">
+            <div class="text-subtitle-1 font-weight-medium data-table-text-primary task-title-cell">{{ item.title }}</div>
+            <div v-if="item.description" class="text-caption data-table-text-secondary task-description-cell">
+              {{ item.description }}
+            </div>
+          </template>
+          <template v-slot:item.status="{item}">
+             <v-chip :color="getStatusColor(item.status)" size="small" label variant="flat" class="data-table-chip status-chip text-uppercase">
+                {{ item.status.replace('_', ' ') }}
+             </v-chip>
+          </template>
+          <template v-slot:item.actions="{ item }">
+            <div class="action-icons">
+              <v-tooltip text="Edit Task" location="top">
+                <template v-slot:activator="{ props: tooltip }">
+                  <v-btn
+                    v-bind="tooltip"
+                    v-if="canManageTasks"
+                    icon="mdi-pencil-outline"
+                    variant="text"
+                    size="small"
+                    @click.stop="openEditDialog(item)"
+                    color="primary"
+                    class="mx-1"
+                    :aria-label="'Edit task ' + item.title"
+                  ></v-btn>
+                </template>
+              </v-tooltip>
+              <v-tooltip text="Delete Task" location="top">
+                <template v-slot:activator="{ props: tooltip }">
+                  <v-btn
+                    v-bind="tooltip"
+                    v-if="canManageTasks"
+                    icon="mdi-delete-outline"
+                    variant="text"
+                    size="small"
+                    @click.stop="openDeleteDialog(item)"
+                    color="error"
+                    :aria-label="'Delete task ' + item.title"
+                  ></v-btn>
+                </template>
+              </v-tooltip>
+            </div>
+          </template>
+          <template v-slot:loading>
+            <v-skeleton-loader type="table-row@10" :color="$vuetify.theme.current.colors.background"></v-skeleton-loader>
+          </template>
+          <template v-slot:no-data>
+            <div class="state-content-message">
+              <v-icon size="56" class="mb-3" color="grey-lighten-1">mdi-text-box-search-outline</v-icon>
+              <div class="text-subtitle-1 font-weight-medium">
+                <template v-if="search">No tasks found matching "{{ search }}".</template>
+                <template v-else>No tasks available.</template>
+              </div>
+               <p class="text-body-2 text-medium-emphasis mt-1" v-if="!search && canManageTasks">Try creating a new task to get started!</p>
+            </div>
+          </template>
+        </v-data-table>
+
+        <div
+          v-else-if="showEmptyState"
+          class="state-content-message"
+        >
+          <v-icon size="64" :color="$vuetify.theme.current.colors.primary" class="mb-4">mdi-view-list-outline</v-icon>
+          <p class="text-h6 font-weight-regular">No Tasks Yet</p>
+          <p class="text-body-2 text-medium-emphasis mt-1">Create your first task to get started.</p>
+           <v-btn v-if="canManageTasks" color="primary" @click="openCreateDialog" class="mt-6 add-user-btn" variant="flat">Create New Task</v-btn>
+        </div>
+        <div
+          v-else-if="!tasksLoading && !showErrorAlert"
+          class="state-content-message"
+        >
+          <v-progress-circular indeterminate color="primary" size="48"></v-progress-circular>
+          <p class="text-body-1 text-medium-emphasis mt-4">Initializing Task List...</p>
+        </div>
       </div>
     </v-card>
 
@@ -179,31 +190,31 @@
     </v-dialog>
 
     <v-dialog v-model="isConfirmDeleteDialogOpen" persistent max-width="450px">
-      <v-card :color="$vuetify.theme.current.colors.surface">
-          <v-card-title class="text-h5 font-weight-medium d-flex align-center" :style="{ color: $vuetify.theme.current.colors.error }">
-              <v-icon start :color="$vuetify.theme.current.colors.error">mdi-alert-circle-outline</v-icon>
+      <v-card :color="$vuetify.theme.current.colors.surface" rounded="lg">
+          <v-card-title class="text-h5 font-weight-medium d-flex align-center dialog-title-error">
+              <v-icon start class="dialog-title-icon">mdi-alert-circle-outline</v-icon>
               Confirm Deletion
           </v-card-title>
-          <v-card-text class="py-4 data-table-primary-text">
+          <v-card-text class="py-4 dialog-text-primary">
               Are you sure you want to permanently delete the task:
-              <br>
+              <br/>
               <strong class="text-subtitle-1 my-1 d-block">{{ taskToDeleteTitle }}</strong>
               This action cannot be undone.
           </v-card-text>
-          <v-card-actions>
+          <v-card-actions class="pa-4 dialog-actions">
               <v-spacer></v-spacer>
               <v-btn
                   text
                   @click="isConfirmDeleteDialogOpen = false"
                   :disabled="formSubmitting"
-                  class="data-table-secondary-text"
+                  class="dialog-btn-cancel"
               >Cancel</v-btn>
               <v-btn
                   color="error"
                   variant="flat"
                   @click="confirmDeleteTask"
                   :loading="formSubmitting"
-                  class="font-weight-bold"
+                  class="font-weight-bold dialog-btn-confirm"
               >Delete Task</v-btn>
           </v-card-actions>
       </v-card>
@@ -269,18 +280,19 @@ const formatPriority = (priority) => {
 const getPriorityColor = (priority) => {
   switch (priority) {
     case 4: return 'error';
-    case 3: return 'warning';
+    case 3: return 'orange-darken-2';
     case 2: return 'info';
-    case 1: return 'success';
-    default: return 'secondary';
+    case 1: return 'success-lighten-1';
+    default: return 'grey';
   }
 };
 const getStatusColor = (status) => {
-  const lowerStatus = status?.toLowerCase();
+  const lowerStatus = status?.toLowerCase().replace('_', ' ');
   if (lowerStatus === 'done' || lowerStatus === 'completed') return 'success';
-  if (lowerStatus === 'in_progress' || lowerStatus === 'in progress') return 'info';
-  if (lowerStatus === 'blocked' || lowerStatus === 'on_hold') return 'warning';
-  return 'secondary';
+  if (lowerStatus === 'in progress') return 'primary';
+  if (lowerStatus === 'todo' || lowerStatus === 'to do') return 'info';
+  if (lowerStatus === 'blocked' || lowerStatus === 'on hold') return 'warning';
+  return 'blue-grey-lighten-1';
 };
 
 const openCreateDialog = () => {
@@ -365,7 +377,9 @@ const loadTasks = async () => {
   }
   finally {
     tasksLoading.value = false;
-    componentReady.value = true;
+    if (!componentReady.value) {
+      componentReady.value = true;
+    }
   }
 };
 
@@ -384,101 +398,248 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .task-list-view-container {
-  height: calc(100vh - 64px);
-  padding-bottom: 16px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
-.card-container {
-  border: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.12);
-}
+
 .header-title {
   color: rgb(var(--v-theme-on-background));
 }
-.search-field .v-field__input {
-    min-height: 40px;
+
+.task-list-actions {
+  flex-grow: 1;
+  justify-content: flex-end;
 }
-.create-task-btn {
+
+.search-field {
+  max-width: 320px;
+  flex-grow: 1;
+}
+
+.card-container {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.card-header-section {
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.add-user-btn { /* Reusing class name for consistency */
   color: rgb(var(--v-theme-on-primary));
+  font-weight: 500;
 }
-.task-data-table {
-  --footer-height: 58px;
-  color: rgb(var(--v-theme-on-surface));
-  :deep(.v-table__wrapper) {
-    height: calc(100% - var(--footer-height));
-    overflow-y: auto;
+@media (max-width: 600px) {
+  .task-list-actions {
+    width: 100%;
+    .search-field {
+      max-width: none;
+    }
   }
+  .add-user-btn {
+    width: 100%;
+  }
+}
+
+
+.filter-control { /* Reusing class from UserListView for consistency */
+  :deep(.v-field) {
+    background-color: rgba(var(--v-theme-on-surface), 0.04) !important;
+    border-radius: var(--v-border-radius-lg);
+    transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
+  }
+  :deep(.v-field__outline) {
+    border-color: rgba(var(--v-theme-on-surface), 0.15) !important;
+  }
+  &:hover :deep(.v-field__outline) {
+    border-color: rgba(var(--v-theme-on-surface), 0.35) !important;
+  }
+  &.v-input--is-focused :deep(.v-field__outline) {
+    border-color: rgb(var(--v-theme-primary)) !important;
+    box-shadow: 0 0 0 3px rgba(var(--v-theme-primary-rgb), 0.12);
+  }
+  :deep(.v-label.v-field-label) {
+    color: rgba(var(--v-theme-on-surface), 0.65) !important;
+    font-weight: 400;
+  }
+  :deep(.v-field--active .v-label.v-field-label) {
+    color: rgb(var(--v-theme-primary)) !important;
+  }
+  :deep(input) {
+    color: rgb(var(--v-theme-on-surface)) !important;
+  }
+  :deep(.v-field__prepend-inner .v-icon) {
+    color: rgba(var(--v-theme-on-surface), 0.5) !important;
+  }
+}
+
+.table-and-state-wrapper {
+  overflow: hidden;
+  position: relative;
+  flex-grow: 1;
+}
+
+.user-data-table { /* Reusing class name for consistency in table styling */
+  color: rgb(var(--v-theme-on-surface));
+  border-radius: 0 0 var(--v-border-radius-lg) var(--v-border-radius-lg);
+
+  :deep(.v-table__wrapper) {
+    overflow-y: auto;
+    height: 100%;
+    border-radius: 0 0 var(--v-border-radius-lg) var(--v-border-radius-lg);
+  }
+
   :deep(thead th) {
     position: sticky;
     top: 0;
-    background-color: rgba(var(--v-theme-surface-rgb), 0.97) !important;
-    backdrop-filter: blur(4px);
+    background-color: rgba(var(--v-theme-surface-rgb), 0.98) !important;
+    backdrop-filter: blur(6px);
     z-index: 10;
-    border-bottom: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.15) !important;
-    color: rgba(var(--v-theme-on-surface-rgb), 0.8) !important;
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1) !important;
+    color: rgba(var(--v-theme-on-surface), 0.75) !important;
     font-weight: 500 !important;
+    font-size: 0.8125rem; 
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    height: 48px !important;
   }
-  :deep(tbody tr) {
-      &:hover {
-          background-color: rgba(var(--v-theme-primary-rgb), 0.07) !important;
-      }
-      &.v-data-table__tr--selected:hover {
-          background-color: rgba(var(--v-theme-primary-rgb), 0.12) !important;
-      }
+
+  :deep(tbody tr:hover) {
+    background-color: rgba(var(--v-theme-primary-rgb), 0.05) !important;
   }
+  :deep(tbody tr.v-data-table__tr--selected:hover) {
+    background-color: rgba(var(--v-theme-primary-rgb), 0.08) !important;
+  }
+  :deep(tbody tr.v-data-table__tr--selected td) {
+    background-color: rgba(var(--v-theme-primary-rgb), 0.04) !important;
+  }
+
+
   :deep(.v-data-table__td) {
-      border-bottom: thin solid rgba(var(--v-theme-on-surface-rgb), 0.08) !important;
-      padding-top: 12px !important;
-      padding-bottom: 12px !important;
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
+    padding: 10px 16px !important;
+    font-size: 0.875rem; 
+    height: auto !important; // Allow cells to grow for title/description
+    vertical-align: top; // Align content to top for multi-line cells
   }
-   :deep(.v-data-table-footer) {
-      border-top: 1px solid rgba(var(--v-theme-on-surface-rgb), 0.15) !important;
-      color: rgba(var(--v-theme-on-surface-rgb), 0.7) !important;
+  :deep(.v-data-table__td.v-data-table-column--select) { // Center checkbox vertically
+      vertical-align: middle;
   }
-  .data-table-primary-text, .cell-title {
-      color: rgb(var(--v-theme-on-surface));
-      line-height: 1.45;
+   :deep(.v-data-table__td > .v-data-table-column__checkbox) { // Ensure checkbox doesn't add extra height
+        height: auto;
+   }
+
+
+  .data-table-text-primary {
+    color: rgb(var(--v-theme-on-surface));
+    line-height: 1.45;
+    font-weight: 500;
   }
-  .data-table-secondary-text, .cell-description {
-      color: rgba(var(--v-theme-on-surface-rgb), 0.75);
-      line-height: 1.45;
+
+  .data-table-text-secondary {
+    color: rgba(var(--v-theme-on-surface), 0.7);
+    line-height: 1.45;
+    font-size: 0.8125rem;
   }
-  .data-table-description-text {
-      font-size: 0.8rem;
-      margin-top: 2px;
-      max-height: 3.9em;
-      overflow: hidden;
-      text-overflow: ellipsis;
+
+  .task-title-cell {
+    display: block;
+    white-space: normal;
+    word-break: break-word;
   }
+  .task-description-cell {
+    font-size: 0.8125rem;
+    margin-top: 4px;
+    max-height: 3.6em; /* Approx 2-3 lines */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+  }
+
+
   .data-table-chip {
-      &.status-chip {
-          color: rgb(var(--v-theme-on-primary)) !important;
-      }
+    font-weight: 500 !important;
+    font-size: 0.75rem !important; 
+    padding: 2px 8px;
+    height: 24px !important;
+    letter-spacing: 0.02em;
+    &.status-chip {
+      color: rgb(var(--v-theme-on-primary)) !important; // Assuming flat variant has on-primary text
+    }
   }
+
   .action-icons .v-btn {
-      color: rgba(var(--v-theme-on-surface-rgb), 0.65);
-      &:hover {
-          color: rgb(var(--v-theme-primary));
-      }
+    color: rgba(var(--v-theme-on-surface), 0.6);
+    &:hover {
+      color: rgb(var(--v-theme-primary));
+    }
+    &[color="error"]:hover {
+      color: rgb(var(--v-theme-error));
+    }
   }
-  .action-icons .v-btn[color="error"] {
-     &:hover {
-       color: rgb(var(--v-theme-error)) !important;
-     }
+
+  :deep(.v-data-table-footer) {
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    padding: 8px 0;
+    background-color: rgb(var(--v-theme-surface));
+    border-radius: 0 0 var(--v-border-radius-lg) var(--v-border-radius-lg);
   }
 }
-.empty-state-content, .initializing-placeholder {
+
+.state-content-message {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
-  padding: 32px;
+  padding: 40px 24px;
   flex-grow: 1;
   color: rgb(var(--v-theme-on-surface));
 }
-.empty-state-content .text-h6, .empty-state-content .text-body-2 {
-   color: rgba(var(--v-theme-on-surface-rgb), 0.8);
+.state-content-message .text-h6,
+.state-content-message .text-subtitle-1 {
+   color: rgba(var(--v-theme-on-surface), 0.9);
 }
-.initializing-placeholder .text-medium-emphasis {
-   color: rgba(var(--v-theme-on-surface-rgb), 0.7);
+.state-content-message .text-body-1,
+.state-content-message .text-body-2 {
+   color: rgba(var(--v-theme-on-surface), 0.65);
 }
+
+/* Dialog Styles (copied from UserListView for consistency) */
+.dialog-title-error {
+  color: rgb(var(--v-theme-error)) !important;
+}
+.dialog-title-icon {
+   color: rgb(var(--v-theme-error)) !important;
+}
+.dialog-text-primary {
+  color: rgb(var(--v-theme-on-surface));
+  line-height: 1.6;
+  strong {
+    color: rgb(var(--v-theme-on-surface));
+    font-weight: 500;
+  }
+}
+.dialog-actions {
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
+}
+.dialog-btn-cancel {
+  color: rgba(var(--v-theme-on-surface), 0.75);
+  &:hover {
+    color: rgb(var(--v-theme-on-surface));
+  }
+}
+.dialog-btn-confirm {
+  color: rgb(var(--v-theme-on-error)) !important; // For flat error button text
+}
+
 </style>
