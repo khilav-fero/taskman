@@ -1,3 +1,20 @@
+// lib/choices.js
+
+// --- ADD ROLE CHOICES ---
+export const Role = Object.freeze({ 
+    ADMIN: 'ADMIN',
+    MANAGER: 'MANAGER',
+    TEAM_MEMBER: 'TEAM_MEMBER'
+});
+
+export const roleChoicesForSelect = [
+    { value: Role.ADMIN, title: 'Admin' },
+    { value: Role.MANAGER, title: 'Manager' },
+    { value: Role.TEAM_MEMBER, title: 'Team Member' }
+];
+// --- END ADDITION ---
+
+
 export const taskStatusChoices = [
     { value: 'TODO', title: 'To-Do' },
     { value: 'INPROGRESS', title: 'In-Progress' },

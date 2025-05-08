@@ -54,12 +54,13 @@
 #             return Response({'error': 'An unexpected error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # apps/users/views.py
+# apps/users/views.py
 from django.contrib.auth.models import User
-from rest_framework import generics, viewsets, permissions, status
+from rest_framework import generics, viewsets, permissions, status # Added status
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
-from rest_framework.decorators import action # Make sure this is imported
+from rest_framework.decorators import action
 from .models import Profile
 from .serializers import UserSerializer, RegisterSerializer, ProfileSerializer
 from .permissions import IsAdminUser, IsAdminOrManagerUser
@@ -79,42 +80,68 @@ class CustomAuthToken(ObtainAuthToken):
         user_serializer = UserSerializer(user, context={'request': request})
         return Response({'token': token.key, 'user': user_serializer.data})
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = User.objects.all().select_related('profile').order_by('-date_joined')
+# --- CHANGED Base Class ---
+class UserViewSet(viewsets.ModelViewSet):
+# --- END CHANGE ---
+
+    queryset = User.objects.all().select_related('profile').order_by('username') # Changed ordering to username
     serializer_class = UserSerializer
 
+    # Optional: Add serializer differentiation if needed for list vs detail
+    # def get_serializer_class(self):
+    #    if self.action == 'list':
+    #        # return UserBasicSerializer # Define if needed
+    #    return super().get_serializer_class()
+
     def get_permissions(self):
-        # Ensure 'get_current_user' action has appropriate permissions
         if self.action == 'list':
             permission_classes = [IsAdminOrManagerUser]
-        elif self.action == 'retrieve' or self.action == 'get_current_user': # <<< Add get_current_user here
+        elif self.action == 'retrieve' or self.action == 'get_current_user':
             permission_classes = [permissions.IsAuthenticated]
-        elif self.action == 'update_role':
-            permission_classes = [IsAdminUser]
+        elif self.action in ['update', 'partial_update', 'destroy', 'update_role']: # <<< ADDED standard actions
+            permission_classes = [IsAdminUser] # Only Admins can perform these
         else:
-            permission_classes = [permissions.IsAdminUser] # Default restrictive
+            permission_classes = [IsAdminUser] # Restrict unknown actions to Admin
         return [permission() for permission in permission_classes]
 
-    # --- VERIFY THIS ACTION EXISTS AND IS CORRECT ---
+    # Standard update/partial_update/destroy methods are inherited from ModelViewSet
+    # Only override them if you need custom logic (e.g., preventing self-delete).
+
+    # Prevent admin from deleting themselves (Example override)
+    def perform_destroy(self, instance):
+        if instance == self.request.user:
+            # You might want to raise a specific DRF exception here
+            # from rest_framework.exceptions import PermissionDenied
+            # raise PermissionDenied("Administrators cannot delete their own account.")
+            # For simplicity, just prevent deletion silently or return error
+             print(f"Admin user {self.request.user} attempted self-deletion.")
+             # Return a custom response instead of deleting
+             # Need to find a way to stop the default 204 response in this case
+             # A PermissionDenied exception is cleaner. Let's use that.
+             from rest_framework.exceptions import PermissionDenied
+             raise PermissionDenied("Administrators cannot delete their own account via the API.")
+        instance.delete()
+
+
     @action(detail=False, methods=['get'], url_path='me', permission_classes=[permissions.IsAuthenticated])
     def get_current_user(self, request):
-        """
-        Returns details for the currently authenticated user.
-        Accessible via /api/users/me/
-        """
-        # Check if user is authenticated (should be guaranteed by permission_classes, but safe check)
         if not request.user.is_authenticated:
             return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
-
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
-    # --- END VERIFICATION ---
 
     @action(detail=True, methods=['patch'], permission_classes=[IsAdminUser], url_path='update-role')
     def update_role(self, request, pk=None):
-        user = self.get_object(); new_role = request.data.get('role')
-        if not new_role or new_role not in Role.values: return Response({'error': f'Valid role required: {Role.values}'}, status=status.HTTP_400_BAD_REQUEST)
+        user = self.get_object()
+        new_role = request.data.get('role')
+        if not new_role or new_role not in Role.values:
+            return Response({'error': f'Valid role required: {Role.values}'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            profile, created = Profile.objects.get_or_create(user=user); profile.role = new_role; profile.save()
-            serializer = ProfileSerializer(profile); return Response(serializer.data)
-        except Exception as e: return Response({'error': 'An unexpected error occurred.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            profile, created = Profile.objects.get_or_create(user=user)
+            profile.role = new_role
+            profile.save()
+            serializer = ProfileSerializer(profile)
+            return Response(serializer.data)
+        except Exception as e:
+            # Log the actual error e
+            return Response({'error': 'An unexpected error occurred updating role.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -45,7 +45,6 @@
       }
   });
   
-  // Access the reactive computed prop passed from the parent grid
   const canManage = computed(() => props.params.canManage?.value ?? false);
   
   const editTask = () => {
@@ -57,7 +56,6 @@
   };
   
   const deleteTask = () => {
-      // Call the handler passed via params, which should open a confirmation dialog
       if (props.params.onDeleteClick) {
           props.params.onDeleteClick(props.params.data.id); // Pass only the ID
       } else {
@@ -68,11 +66,7 @@
   </script>
   
   <style scoped>
-  /* Ensure buttons are centered if needed */
   div {
-      /* display: flex; */ /* Already set */
-      /* align-items: center; */ /* Already set */
-      /* justify-content: center; */ /* Center horizontally */
-      /* height: 100%; */ /* Fill cell height */
+
   }
   </style>
