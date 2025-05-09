@@ -14,7 +14,7 @@ from .serializers import (
 )
 from .permissions import IsAdminUser, IsAdminOrManagerUser
 from lib.choices import Role
-from .filters import UserFilter # Import the custom FilterSet
+from .filters import UserFilter 
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -41,7 +41,7 @@ class UserViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_class = UserFilter # Use the custom FilterSet class
+    filterset_class = UserFilter 
     search_fields = ['username', 'email', 'first_name', 'last_name']
     ordering_fields = ['username', 'email', 'first_name', 'last_name', 'date_joined', 'profile__role']
 

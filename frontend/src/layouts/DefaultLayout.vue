@@ -14,7 +14,7 @@
     >
       <v-list-item
         lines="two"
-        :prepend-avatar="injectedCurrentUser?.profile?.avatar_url || 'https://via.placeholder.com/40/' + ($vuetify.theme.current.colors.primary.substring(1)) + '/FFFFFF?text=' + (injectedCurrentUser?.username?.[0]?.toUpperCase() || 'U')"
+        :prepend-avatar="injectedCurrentUser?.profile?.avatar_url || 'https://via.placeholder.com/40/primary/FFFFFF?text=' + ($vuetify.theme.current.colors.primary.substring(1)) + '/FFFFFF?text=' + (injectedCurrentUser?.username?.[0]?.toUpperCase() || 'U')"
         nav
         class="user-profile-list-item pa-2 mx-1 mt-1"
         min-height="68"

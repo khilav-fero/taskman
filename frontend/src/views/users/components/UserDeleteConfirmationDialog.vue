@@ -9,7 +9,6 @@
           Are you sure you want to permanently delete the user:
           <br />
           <strong class="text-subtitle-1 my-1 d-block">{{ userToDelete?.username }}</strong>
-          (ID: {{ userToDelete?.id }})?
           <br />
           <strong :style="{ color: $vuetify.theme.current.colors.error }">This action cannot be undone.</strong>
           <v-alert

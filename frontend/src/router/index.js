@@ -4,7 +4,7 @@ const DefaultLayout = () => import('@/layouts/DefaultLayout.vue');
 
 const LoginPage = () => import('../views/LoginPage.vue');
 const RegisterPage = () => import('../views/RegisterPage.vue');
-const TaskListView = () => import('../views/TaskListView.vue');
+const TaskListView = () => import('../views/tasks/TaskListView.vue');
 const UserListView = () => import('../views/users/UserListView.vue');
 
 

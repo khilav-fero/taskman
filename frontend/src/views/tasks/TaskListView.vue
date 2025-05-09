@@ -36,9 +36,8 @@
       :color="$vuetify.theme.current.colors.surface"
       rounded="lg"
     >
-      <div class="card-header-section flex-shrink-0">
+      <div v-if="showErrorAlert" class="card-header-section flex-shrink-0">
         <v-alert
-          v-if="showErrorAlert"
           type="error"
           variant="tonal"
           closable
@@ -59,15 +58,14 @@
       <div class="table-and-state-wrapper flex-grow-1 d-flex flex-column">
         <v-data-table
           v-if="showTable"
-          v-model="selectedTasks"
           :headers="dataTableHeaders"
           :items="tasksList"
           :search="search"
           :loading="tasksLoading"
-          :items-per-page="itemsPerPage"
+          :items-per-page.sync="itemsPerPage"
+          :page.sync="currentPage"
           :sort-by="initialSortBy"
           item-value="id"
-          show-select
           class="flex-grow-1 task-data-table user-data-table"
           fixed-header
           height="100%"
@@ -177,8 +175,9 @@
       </div>
     </v-card>
 
-    <v-dialog v-model="isFormDialogOpen" persistent max-width="700px" @keydown.esc="closeFormDialog">
+    <v-dialog v-model="isFormDialogOpen" persistent max-width="700px" @keydown.esc="closeFormDialog" scrollable>
       <TaskForm
+        v-if="isFormDialogOpen"
         :initial-data="editingTask"
         :loading="formSubmitting"
         :error="formError"
@@ -189,51 +188,29 @@
       />
     </v-dialog>
 
-    <v-dialog v-model="isConfirmDeleteDialogOpen" persistent max-width="450px">
-      <v-card :color="$vuetify.theme.current.colors.surface" rounded="lg">
-          <v-card-title class="text-h5 font-weight-medium d-flex align-center dialog-title-error">
-              <v-icon start class="dialog-title-icon">mdi-alert-circle-outline</v-icon>
-              Confirm Deletion
-          </v-card-title>
-          <v-card-text class="py-4 dialog-text-primary">
-              Are you sure you want to permanently delete the task:
-              <br/>
-              <strong class="text-subtitle-1 my-1 d-block">{{ taskToDeleteTitle }}</strong>
-              This action cannot be undone.
-          </v-card-text>
-          <v-card-actions class="pa-4 dialog-actions">
-              <v-spacer></v-spacer>
-              <v-btn
-                  text
-                  @click="isConfirmDeleteDialogOpen = false"
-                  :disabled="formSubmitting"
-                  class="dialog-btn-cancel"
-              >Cancel</v-btn>
-              <v-btn
-                  color="error"
-                  variant="flat"
-                  @click="confirmDeleteTask"
-                  :loading="formSubmitting"
-                  class="font-weight-bold dialog-btn-confirm"
-              >Delete Task</v-btn>
-          </v-card-actions>
-      </v-card>
-  </v-dialog>
+    <TaskDeleteConfirmationDialog
+      v-if="isConfirmDeleteDialogOpen"
+      v-model="isConfirmDeleteDialogOpen"
+      :task-to-delete="taskToDelete"
+      @confirmed="handleTaskDeleted"
+      @error="handleDeleteError"
+    />
+
   </v-container>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, inject } from 'vue';
+import { ref, onMounted, computed, inject, watch } from 'vue';
 import { fetchTasks, createTask as createTaskApi, updateTask as updateTaskApi, deleteTaskApi as deleteTaskServiceApi } from '@/services/taskService';
-import TaskForm from '@/components/TaskForm.vue';
+import TaskForm from '@/views/tasks/components/TaskForm.vue';
+import TaskDeleteConfirmationDialog from './components/TaskDeleteConfirmationDialog.vue';
 
 const currentUser = inject('currentUser', ref(null));
 
 const componentReady = ref(false);
 const itemsPerPage = ref(15);
+const currentPage = ref(1);
 const search = ref('');
-const selectedTasks = ref([]);
-const initialSortBy = ref([{ key: 'created_at', order: 'desc' }]);
 
 const tasksList = ref([]);
 const tasksLoading = ref(false);
@@ -295,6 +272,10 @@ const getStatusColor = (status) => {
   return 'blue-grey-lighten-1';
 };
 
+watch(itemsPerPage, () => {
+  currentPage.value = 1;
+});
+
 const openCreateDialog = () => {
   editingTask.value = null;
   formError.value = null;
@@ -312,25 +293,35 @@ const closeFormDialog = () => {
 };
 
 const openDeleteDialog = (task) => {
-  taskToDelete.value = task;
+  taskToDelete.value = { ...task };
+  formError.value = null;
   isConfirmDeleteDialogOpen.value = true;
 };
 
 const confirmDeleteTask = async () => {
   if (!taskToDelete.value || !taskToDelete.value.id) return;
   formSubmitting.value = true;
-  formError.value = null;
   try {
     await deleteTaskServiceApi(taskToDelete.value.id);
-    await loadTasks();
     isConfirmDeleteDialogOpen.value = false;
     taskToDelete.value = null;
+    await loadTasks();
   } catch (err) {
-    formError.value = err?.detail || err?.message || 'Failed to delete task.';
-    console.error("Error deleting task:", err);
+    console.error("Error deleting task in TaskListView:", err);
   } finally {
     formSubmitting.value = false;
   }
+};
+
+const handleTaskDeleted = async () => {
+  isConfirmDeleteDialogOpen.value = false;
+  taskToDelete.value = null;
+  await loadTasks();
+};
+
+const handleDeleteError = (errorMessage) => {
+  console.error("Delete operation failed (TaskListView):", errorMessage);
+  tasksError.value = errorMessage;
 };
 
 const onFormSubmit = async (formDataFromForm) => {
@@ -429,9 +420,10 @@ onMounted(() => {
 .card-header-section {
   flex-shrink: 0;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  padding: 4px 0px;
 }
 
-.add-user-btn { /* Reusing class name for consistency */
+.add-user-btn {
   color: rgb(var(--v-theme-on-primary));
   font-weight: 500;
 }
@@ -447,8 +439,7 @@ onMounted(() => {
   }
 }
 
-
-.filter-control { /* Reusing class from UserListView for consistency */
+.filter-control {
   :deep(.v-field) {
     background-color: rgba(var(--v-theme-on-surface), 0.04) !important;
     border-radius: var(--v-border-radius-lg);
@@ -485,7 +476,7 @@ onMounted(() => {
   flex-grow: 1;
 }
 
-.user-data-table { /* Reusing class name for consistency in table styling */
+.user-data-table {
   color: rgb(var(--v-theme-on-surface));
   border-radius: 0 0 var(--v-border-radius-lg) var(--v-border-radius-lg);
 
@@ -498,13 +489,13 @@ onMounted(() => {
   :deep(thead th) {
     position: sticky;
     top: 0;
-    background-color: rgba(var(--v-theme-surface-rgb), 0.98) !important;
+    background-color: rgb(var(--v-theme-surface)) !important;
     backdrop-filter: blur(6px);
     z-index: 10;
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1) !important;
     color: rgba(var(--v-theme-on-surface), 0.75) !important;
     font-weight: 500 !important;
-    font-size: 0.8125rem; 
+    font-size: 0.8125rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     height: 48px !important;
@@ -513,39 +504,26 @@ onMounted(() => {
   :deep(tbody tr:hover) {
     background-color: rgba(var(--v-theme-primary-rgb), 0.05) !important;
   }
-  :deep(tbody tr.v-data-table__tr--selected:hover) {
-    background-color: rgba(var(--v-theme-primary-rgb), 0.08) !important;
-  }
-  :deep(tbody tr.v-data-table__tr--selected td) {
-    background-color: rgba(var(--v-theme-primary-rgb), 0.04) !important;
-  }
-
 
   :deep(.v-data-table__td) {
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
-    padding: 10px 16px !important;
-    font-size: 0.875rem; 
-    height: auto !important; // Allow cells to grow for title/description
-    vertical-align: top; // Align content to top for multi-line cells
+    padding: 12px 16px !important;
+    font-size: 0.9rem;
+    height: auto !important;
+    vertical-align: top;
   }
-  :deep(.v-data-table__td.v-data-table-column--select) { // Center checkbox vertically
-      vertical-align: middle;
-  }
-   :deep(.v-data-table__td > .v-data-table-column__checkbox) { // Ensure checkbox doesn't add extra height
-        height: auto;
-   }
-
 
   .data-table-text-primary {
     color: rgb(var(--v-theme-on-surface));
-    line-height: 1.45;
+    line-height: 1.5;
     font-weight: 500;
+    font-size: 0.95rem;
   }
 
   .data-table-text-secondary {
-    color: rgba(var(--v-theme-on-surface), 0.7);
-    line-height: 1.45;
-    font-size: 0.8125rem;
+    color: rgba(var(--v-theme-on-surface), 0.75);
+    line-height: 1.5;
+    font-size: 0.875rem;
   }
 
   .task-title-cell {
@@ -554,9 +532,9 @@ onMounted(() => {
     word-break: break-word;
   }
   .task-description-cell {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     margin-top: 4px;
-    max-height: 3.6em; /* Approx 2-3 lines */
+    max-height: 3.8em;
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -565,15 +543,14 @@ onMounted(() => {
     white-space: normal;
   }
 
-
   .data-table-chip {
     font-weight: 500 !important;
-    font-size: 0.75rem !important; 
-    padding: 2px 8px;
-    height: 24px !important;
+    font-size: 0.8rem !important;
+    padding: 3px 10px;
+    height: 26px !important;
     letter-spacing: 0.02em;
     &.status-chip {
-      color: rgb(var(--v-theme-on-primary)) !important; // Assuming flat variant has on-primary text
+      color: rgb(var(--v-theme-on-primary)) !important;
     }
   }
 
@@ -589,9 +566,36 @@ onMounted(() => {
 
   :deep(.v-data-table-footer) {
     border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-    padding: 8px 0;
+    padding: 10px 0;
     background-color: rgb(var(--v-theme-surface));
     border-radius: 0 0 var(--v-border-radius-lg) var(--v-border-radius-lg);
+    .v-data-table-footer__items-per-page {
+        color: rgba(var(--v-theme-on-surface), 0.75) !important;
+        font-size: 0.875rem;
+        .v-select .v-field__input, .v-select .v-select__selection-text {
+            color: rgba(var(--v-theme-on-surface), 0.9) !important;
+            font-size: 0.875rem;
+        }
+        .v-select .v-field__outline {
+            display: none;
+        }
+        .v-icon {
+            color: rgba(var(--v-theme-on-surface), 0.65) !important;
+        }
+    }
+    .v-data-table-footer__info {
+        color: rgba(var(--v-theme-on-surface), 0.75) !important;
+        font-size: 0.875rem;
+    }
+    .v-pagination__item .v-btn {
+        color: rgba(var(--v-theme-on-surface), 0.75) !important;
+    }
+    .v-pagination__item--is-active .v-btn {
+        color: rgb(var(--v-theme-on-primary)) !important;
+    }
+     .v-pagination__prev .v-btn, .v-pagination__next .v-btn {
+        color: rgba(var(--v-theme-on-surface), 0.75) !important;
+     }
   }
 }
 
@@ -614,7 +618,6 @@ onMounted(() => {
    color: rgba(var(--v-theme-on-surface), 0.65);
 }
 
-/* Dialog Styles (copied from UserListView for consistency) */
 .dialog-title-error {
   color: rgb(var(--v-theme-error)) !important;
 }
@@ -631,15 +634,18 @@ onMounted(() => {
 }
 .dialog-actions {
   background-color: rgba(var(--v-theme-on-surface), 0.03);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 .dialog-btn-cancel {
   color: rgba(var(--v-theme-on-surface), 0.75);
+  font-weight: 500;
   &:hover {
     color: rgb(var(--v-theme-on-surface));
   }
 }
 .dialog-btn-confirm {
-  color: rgb(var(--v-theme-on-error)) !important; // For flat error button text
+  color: rgb(var(--v-theme-on-error)) !important;
+  font-weight: 500;
 }
 
 </style>
