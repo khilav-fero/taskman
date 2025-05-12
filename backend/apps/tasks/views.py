@@ -7,8 +7,8 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import Q # Import Q objects
-from lib.choices import Role # Import Role enum
+from django.db.models import Q
+from lib.choices import Role
 
 from .models import Task, TaskHistory
 from .serializers import TaskSerializer, TaskHistorySerializer
@@ -16,6 +16,7 @@ from apps.users.permissions import (
     IsAdminOrManagerUser,
     IsOwnerOrAdminOrManager
 )
+from .filters import TaskFilter # Import the new filter class
 
 class TaskPagination(PageNumberPagination):
     page_size = 10
@@ -27,34 +28,30 @@ class TaskViewSet(viewsets.ModelViewSet):
         'assignee__profile', 'creator__profile'
     ).prefetch_related(
         'collaborators__profile'
-    ) # Removed default ordering here, let filter backend handle it
+    )
     serializer_class = TaskSerializer
     pagination_class = TaskPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'priority', 'assignee', 'creator', 'deadline']
+    filterset_class = TaskFilter # Use the filterset_class instead of filterset_fields
     search_fields = ['title', 'description']
     ordering_fields = [
         'created_at', 'updated_at', 'deadline', 'priority', 'status', 'title'
     ]
-    ordering = ['-priority', '-created_at'] # Set default ordering here
+    ordering = ['-priority', '-created_at']
 
     def get_queryset(self):
         user = self.request.user
         if not user.is_authenticated:
             return Task.objects.none()
 
-        # Start with the base queryset defined for the class
         base_queryset = super().get_queryset()
 
-        # Apply role-based filtering
         if hasattr(user, 'profile') and user.profile.role in [Role.ADMIN, Role.MANAGER]:
-            # Admins/Managers see all tasks (further filtered by query params)
             return base_queryset
         else:
-            # Team Members see tasks they are involved in
             return base_queryset.filter(
                 Q(assignee=user) | Q(creator=user) | Q(collaborators=user)
-            ).distinct() # distinct is important with M2M filters
+            ).distinct()
 
     def get_permissions(self):
         if self.action == 'create':
@@ -62,7 +59,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         elif self.action in ['update', 'partial_update', 'destroy', 'assign', 'manage_collaborators']:
             permission_classes = [IsOwnerOrAdminOrManager]
         else:
-            permission_classes = [permissions.IsAuthenticated] # list, retrieve
+            permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer):

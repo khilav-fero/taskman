@@ -1,9 +1,9 @@
 // src/services/taskService.js
-import apiClient from './api'; // Corrected path as per your confirmation
+import apiClient from './api';
 
-export const fetchTasks = async () => {
+export const fetchTasks = async (params = {}) => {
   try {
-    const response = await apiClient.get('/tasks/');
+    const response = await apiClient.get('/tasks/', { params: params });
     return response.data;
   } catch (error) {
     console.error("API Error fetching tasks:", error.response?.data || error.message);
@@ -31,7 +31,7 @@ export const updateTask = async (taskId, taskData) => {
     }
 };
 
-export const deleteTaskApi = async (taskId) => { // <<< RENAMED EXPORT TO deleteTaskApi
+export const deleteTaskApi = async (taskId) => {
     try {
         await apiClient.delete(`/tasks/${taskId}/`);
         return true;
