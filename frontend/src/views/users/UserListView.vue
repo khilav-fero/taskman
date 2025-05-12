@@ -83,7 +83,9 @@
             :items="usersList"
             :items-length="totalUsers"
             :loading="usersLoading"
-            v-model:options="serverOptions"
+            v-model:sort-by="sortBy"
+            :items-per-page="itemsPerPage"
+            @update:options="handleOptionsUpdate"
             item-value="id"
             class="user-data-table"
             fixed-header
@@ -91,7 +93,6 @@
             density="comfortable"
             hover
             :no-data-text="noDataText"
-            :items-per-page="serverOptions.itemsPerPage"
             hide-default-footer
           >
             <template v-slot:item.username="{ item }">
@@ -167,13 +168,27 @@
               </div>
             </template>
             <template v-slot:bottom>
-              <div class="table-footer-pagination" v-if="totalUsers > 0 && Math.ceil(totalUsers / serverOptions.itemsPerPage) > 1">
+              <div class="table-footer-pagination d-flex justify-space-between align-center pa-2" v-if="totalUsers > 0">
+                <div class="d-none d-sm-flex align-center text-caption text-medium-emphasis">
+                  Rows per page:
+                  <v-select
+                    v-model="itemsPerPage"
+                    :items="itemsPerPageOptions"
+                    density="compact"
+                    variant="plain"
+                    hide-details
+                    class="ml-2 items-per-page-select"
+                    style="max-width: 80px;"
+                  ></v-select>
+                </div>
+                <v-spacer class="d-sm-none"></v-spacer>
                 <v-pagination
-                  v-model="serverOptions.page"
-                  :length="Math.ceil(totalUsers / serverOptions.itemsPerPage)"
+                  v-model="currentPageForUI"
+                  :length="totalPages"
                   density="comfortable"
                   total-visible="5"
                   active-color="primary"
+                  class="table-pagination-control"
                 ></v-pagination>
               </div>
             </template>
@@ -230,11 +245,11 @@ const usersLoading = ref(false);
 const usersError = ref(null);
 const totalUsers = ref(0);
 
-const serverOptions = ref({
-  page: 1,
-  itemsPerPage: 10,
-  sortBy: [{ key: 'username', order: 'asc' }],
-});
+const itemsPerPage = ref(10);
+const itemsPerPageOptions = ref([5, 10, 15, 25, 50, 100]);
+const currentOffset = ref(0);
+const sortBy = ref([{ key: 'username', order: 'asc' }]);
+const currentPageForUI = ref(1);
 
 const showUserFormDialog = ref(false);
 const editingUserId = ref(null);
@@ -255,6 +270,11 @@ const dataTableHeaders = ref([
 ]);
 
 const availableRolesForFilter = computed(() => roleChoicesForSelect);
+
+const totalPages = computed(() => {
+  if (totalUsers.value === 0 || itemsPerPage.value <= 0) return 1;
+  return Math.ceil(totalUsers.value / itemsPerPage.value);
+});
 
 const showListErrorAlert = computed(() => !!usersError.value && !usersLoading.value);
 const showTableLayout = computed(() => componentReady.value && !showListErrorAlert.value);
@@ -282,17 +302,13 @@ const getRoleColor = (role) => {
 let initialLoadDone = false;
 let searchDebounceTimer = null;
 
-async function loadUsers(options = serverOptions.value) {
-  if (options !== serverOptions.value) {
-    serverOptions.value = { ...serverOptions.value, ...options };
-  }
-
+async function loadUsers() {
   usersLoading.value = true;
   usersError.value = null;
   try {
     const params = new URLSearchParams();
-    params.append('page', serverOptions.value.page);
-    params.append('page_size', serverOptions.value.itemsPerPage);
+    params.append('limit', itemsPerPage.value.toString());
+    params.append('offset', currentOffset.value.toString());
 
     if (selectedRolesFilter.value && selectedRolesFilter.value.length > 0) {
       selectedRolesFilter.value.forEach(role => {
@@ -304,8 +320,8 @@ async function loadUsers(options = serverOptions.value) {
       params.append('search', searchFilter.value);
     }
 
-    if (serverOptions.value.sortBy && serverOptions.value.sortBy.length > 0) {
-      const sortItem = serverOptions.value.sortBy[0];
+    if (sortBy.value && sortBy.value.length > 0) {
+      const sortItem = sortBy.value[0];
       let orderingKey = sortItem.key;
       if (orderingKey === 'role') {
         orderingKey = 'profile__role';
@@ -340,39 +356,71 @@ async function loadUsers(options = serverOptions.value) {
   }
 }
 
+function handleOptionsUpdate(options) {
+  const newPage = options.page || currentPageForUI.value;
+  const newItemsPerPage = options.itemsPerPage || itemsPerPage.value;
+  const newSortBy = options.sortBy || sortBy.value;
+
+  let needsLoad = false;
+
+  if (newItemsPerPage !== itemsPerPage.value) {
+    itemsPerPage.value = newItemsPerPage;
+    currentOffset.value = 0;
+    currentPageForUI.value = 1;
+    needsLoad = true;
+  }
+
+  if (newPage !== currentPageForUI.value) {
+      currentPageForUI.value = newPage;
+      currentOffset.value = (newPage - 1) * itemsPerPage.value;
+      needsLoad = true;
+  }
+  
+  if (JSON.stringify(newSortBy) !== JSON.stringify(sortBy.value)) {
+    sortBy.value = newSortBy;
+    currentOffset.value = 0;
+    currentPageForUI.value = 1;
+    needsLoad = true;
+  }
+
+  if (needsLoad && initialLoadDone) {
+    loadUsers();
+  }
+}
+
+
 watch(selectedRolesFilter, () => {
-  serverOptions.value.page = 1;
+  currentOffset.value = 0;
+  currentPageForUI.value = 1;
   loadUsers();
 }, { deep: true });
 
 
-watch(searchFilter, (newValue) => {
+watch(searchFilter, () => {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(() => {
-    serverOptions.value.page = 1;
+    currentOffset.value = 0;
+    currentPageForUI.value = 1;
     loadUsers();
   }, 400);
 });
 
-watch(
-  () => serverOptions.value.page,
-  (newPage, oldPage) => {
-    if (newPage !== oldPage && initialLoadDone) {
-      loadUsers();
+watch(currentPageForUI, (newPage) => {
+    const newOffset = (newPage - 1) * itemsPerPage.value;
+    if (newOffset !== currentOffset.value && initialLoadDone) {
+        currentOffset.value = newOffset;
+        loadUsers();
     }
-  }
-);
+});
 
-watch(
-  () => serverOptions.value.sortBy,
-  (newSortBy, oldSortBy) => {
-    if (JSON.stringify(newSortBy) !== JSON.stringify(oldSortBy) && initialLoadDone) {
-      serverOptions.value.page = 1;
-      loadUsers();
+watch(itemsPerPage, (newItemsPerPage) => {
+    currentOffset.value = 0;
+    currentPageForUI.value = 1;
+    if (initialLoadDone) {
+        loadUsers();
     }
-  },
-  { deep: true }
-);
+});
+
 
 const openCreateDialog = () => {
   editingUserId.value = null;
@@ -398,15 +446,17 @@ const handleUserSaved = () => {
 
 const handleUserDeleted = () => {
   userForDeletion.value = null;
-  if (usersList.value.length === 1 && serverOptions.value.page > 1 && totalUsers.value > 1) {
-    serverOptions.value.page -= 1;
-  } else {
-    loadUsers();
+  const newTotalPages = Math.ceil((totalUsers.value -1) / itemsPerPage.value);
+  if (currentPageForUI.value > newTotalPages && newTotalPages > 0) {
+      currentPageForUI.value = newTotalPages;
+      currentOffset.value = (newTotalPages - 1) * itemsPerPage.value;
   }
+  loadUsers();
 };
 
 const handleDeleteError = (errorMessage) => {
   console.error("Delete operation failed (caught by parent):", errorMessage);
+  usersError.value = errorMessage;
 };
 
 const clearUsersError = () => {
@@ -416,8 +466,8 @@ const clearUsersError = () => {
 onMounted(() => {
   initialLoadDone = false;
   componentReady.value = false;
-  const { sortBy, page, itemsPerPage } = serverOptions.value;
-  loadUsers({ page, itemsPerPage, sortBy });
+  currentOffset.value = (currentPageForUI.value - 1) * itemsPerPage.value;
+  loadUsers();
 });
 </script>
 
@@ -539,13 +589,13 @@ onMounted(() => {
   :deep(thead th) {
     position: sticky;
     top: 0;
-    background-color: rgba(var(--v-theme-surface-rgb), 0.98) !important;
+    background-color: rgb(var(--v-theme-surface)) !important;
     backdrop-filter: blur(6px);
     z-index: 10;
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1) !important;
     color: rgba(var(--v-theme-on-surface), 0.75) !important;
     font-weight: 500 !important;
-    font-size: 0.8125rem; // 13px
+    font-size: 0.8125rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     height: 48px !important;
@@ -557,28 +607,33 @@ onMounted(() => {
 
   :deep(.v-data-table__td) {
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
-    padding: 10px 16px !important;
-    font-size: 0.875rem; // 14px
+    padding: 12px 16px !important;
+    font-size: 0.9rem;
     height: 52px !important;
   }
 
   .data-table-text-primary {
     color: rgb(var(--v-theme-on-surface));
-    line-height: 1.45;
+    line-height: 1.5;
     font-weight: 500;
+    font-size: 0.95rem;
   }
 
   .data-table-text-secondary {
-    color: rgba(var(--v-theme-on-surface), 0.7);
-    line-height: 1.45;
+    color: rgba(var(--v-theme-on-surface), 0.75);
+    line-height: 1.5;
+    font-size: 0.875rem;
   }
 
   .data-table-chip {
     font-weight: 500 !important;
-    font-size: 0.75rem !important; // 12px
-    padding: 2px 8px;
-    height: 24px !important;
+    font-size: 0.8rem !important;
+    padding: 3px 10px;
+    height: 26px !important;
     letter-spacing: 0.02em;
+    &.text-uppercase {
+      letter-spacing: 0.05em;
+    }
   }
 
   .action-icons .v-btn {
@@ -591,6 +646,31 @@ onMounted(() => {
     }
   }
 }
+
+.table-footer-pagination {
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  padding: 10px 16px;
+  background-color: rgb(var(--v-theme-surface));
+  border-radius: 0 0 var(--v-border-radius-lg) var(--v-border-radius-lg);
+  min-height: 58px;
+
+  .items-per-page-select :deep(.v-input__control) {
+    min-height: 36px !important;
+  }
+  .items-per-page-select :deep(.v-field__field) {
+    height: 36px !important;
+  }
+  .items-per-page-select :deep(.v-select__selection-text) {
+    font-size: 0.875rem;
+  }
+  .table-pagination-control :deep(.v-pagination__list) {
+    justify-content: flex-end;
+  }
+  .table-pagination-control :deep(.v-btn) {
+    margin: 0 2px;
+  }
+}
+
 
 .state-content-message {
   display: flex;
@@ -609,12 +689,5 @@ onMounted(() => {
 .state-content-message .text-body-1,
 .state-content-message .text-body-2 {
    color: rgba(var(--v-theme-on-surface), 0.65);
-}
-
-.table-footer-pagination {
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  padding: 12px 0;
-  background-color: rgb(var(--v-theme-surface));
-  border-radius: 0 0 var(--v-border-radius-lg) var(--v-border-radius-lg);
 }
 </style>
