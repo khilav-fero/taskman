@@ -101,3 +101,4 @@ class TaskHistoryViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_permissions(self):
         return [permission() for permission in self.permission_classes]
+    

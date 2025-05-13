@@ -40,3 +40,13 @@ export const deleteTaskApi = async (taskId) => {
         throw error.response?.data || error;
     }
 };
+
+export const fetchTaskHistory = async (taskId) => {
+  try {
+    const response = await apiClient.get(`/tasks/${taskId}/history/`);
+    return response.data;
+  } catch (error) {
+    console.error(`API Error fetching history for task ${taskId}:`, error.response?.data || error.message);
+    throw error.response?.data || error;
+  }
+};

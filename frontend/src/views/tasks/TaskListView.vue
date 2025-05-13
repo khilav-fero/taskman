@@ -38,6 +38,7 @@
           :items="tasksList"
           :items-length="totalTasks"
           :loading="tasksLoading"
+          :sort-by="sortBy"
           item-value="id"
           class="flex-grow-1 task-data-table user-data-table"
           fixed-header
@@ -256,10 +257,12 @@
     <v-dialog v-model="isDetailDialogOpen" max-width="800px" scrollable @keydown.esc="closeDetailDialog">
         <v-card v-if="selectedTaskForDetail">
             <v-card-title class="d-flex justify-space-between align-center pa-4">
-                <span class="text-h5">{{ isEditingDetail ? 'Edit Task Details' : 'Task Details' }}</span>
+                <span class="text-h5">
+                  {{ detailDialogTab === 'details' && isEditingDetail ? 'Edit Task Details' : (detailDialogTab === 'details' ? 'Task Details' : 'Task History') }}
+                </span>
                  <div class="dialog-actions">
                     <v-btn
-                      v-if="canManageTasks && !isEditingDetail"
+                      v-if="canManageTasks && detailDialogTab === 'details' && !isEditingDetail"
                       color="primary"
                       variant="text"
                       @click="isEditingDetail = true"
@@ -277,87 +280,93 @@
             </v-card-title>
             <v-divider></v-divider>
 
-            <v-card-text class="pa-0">
-                <div v-if="!isEditingDetail" class="pa-5">
-                     <v-row dense>
-                        <v-col cols="12" md="8">
-                            <h3 class="text-h6 mb-1">{{ selectedTaskForDetail.title }}</h3>
-                            <p v-if="selectedTaskForDetail.description" class="text-body-1 text-medium-emphasis" style="white-space: pre-wrap;">{{ selectedTaskForDetail.description }}</p>
-                            <p v-else class="text-body-1 text-disabled">No description provided.</p>
-                        </v-col>
-                        <v-col cols="12" md="4">
-                           <v-list density="compact" class="detail-list bg-transparent">
-                                <v-list-item prepend-icon="mdi-list-status" title="Status">
-                                    <template v-slot:append>
-                                         <v-chip :color="getStatusColor(selectedTaskForDetail.status)" size="small" label variant="flat" class="data-table-chip status-chip text-uppercase">
-                                            {{ selectedTaskForDetail.status.replace('_', ' ') }}
-                                         </v-chip>
-                                    </template>
-                                </v-list-item>
-                                <v-list-item prepend-icon="mdi-priority-high" title="Priority">
-                                    <template v-slot:append>
-                                        <v-chip :color="getPriorityColor(selectedTaskForDetail.priority)" size="small" label variant="tonal" class="data-table-chip">
-                                          {{ formatPriority(selectedTaskForDetail.priority) }}
-                                        </v-chip>
-                                    </template>
-                                </v-list-item>
-                                <v-list-item prepend-icon="mdi-account-outline" title="Assignee">
-                                    <template v-slot:append>
-                                        <span :class="{'text-disabled': !selectedTaskForDetail.assignee}">{{ selectedTaskForDetail.assignee?.username || 'Unassigned' }}</span>
-                                    </template>
-                                </v-list-item>
-                                <v-list-item prepend-icon="mdi-calendar-clock" title="Deadline">
-                                    <template v-slot:append>
-                                        <span>{{ formatFullDate(selectedTaskForDetail.deadline) }}</span>
-                                    </template>
-                                </v-list-item>
-                           </v-list>
-                        </v-col>
-                     </v-row>
-                     <v-divider class="my-4"></v-divider>
-                      <v-row dense>
-                           <v-col cols="12" sm="6">
-                               <v-list density="compact" class="detail-list bg-transparent">
-                                    <v-list-item prepend-icon="mdi-account-edit-outline" title="Created By">
-                                        <template v-slot:append>
-                                            <span>{{ selectedTaskForDetail.creator?.username || 'Unknown' }}</span>
-                                        </template>
-                                    </v-list-item>
-                               </v-list>
-                           </v-col>
-                            <v-col cols="12" sm="6">
-                               <v-list density="compact" class="detail-list bg-transparent">
-                                    <v-list-item prepend-icon="mdi-clock-plus-outline" title="Created On">
-                                        <template v-slot:append>
-                                            <span>{{ formatDateTime(selectedTaskForDetail.created_at) }}</span>
-                                        </template>
-                                    </v-list-item>
-                               </v-list>
-                           </v-col>
-                      </v-row>
-                </div>
-                <div v-else>
-                    <TaskForm
-                        :initial-data="selectedTaskForDetail"
-                        :loading="detailFormSubmitting"
-                        :error="detailFormError"
-                        @submit="onDetailFormSubmit"
-                        @cancel="onDetailFormCancel"
-                        @clear-form-error="clearDetailFormError"
-                        key="task-detail-form-component"
-                        :is-dialog-mode="true"
-                    />
-                </div>
+            <v-tabs v-model="detailDialogTab" color="primary" grow>
+                <v-tab value="details">Details</v-tab>
+                <v-tab value="history">History</v-tab>
+            </v-tabs>
+            <v-divider></v-divider>
+
+            <v-card-text class="pa-0 dialog-content-wrapper">
+              <v-window v-model="detailDialogTab">
+                <v-window-item value="details" class="dialog-window-item">
+                  <div v-if="!isEditingDetail" class="pa-5">
+                       <v-row dense>
+                          <v-col cols="12" md="8">
+                              <h3 class="text-h6 mb-1">{{ selectedTaskForDetail.title }}</h3>
+                              <p v-if="selectedTaskForDetail.description" class="text-body-1 text-medium-emphasis" style="white-space: pre-wrap;">{{ selectedTaskForDetail.description }}</p>
+                              <p v-else class="text-body-1 text-disabled">No description provided.</p>
+                          </v-col>
+                          <v-col cols="12" md="4">
+                             <v-list density="compact" class="detail-list bg-transparent">
+                                  <v-list-item prepend-icon="mdi-list-status" title="Status">
+                                      <template v-slot:append>
+                                           <v-chip :color="getStatusColor(selectedTaskForDetail.status)" size="small" label variant="flat" class="data-table-chip status-chip text-uppercase">
+                                              {{ selectedTaskForDetail.status.replace('_', ' ') }}
+                                           </v-chip>
+                                      </template>
+                                  </v-list-item>
+                                  <v-list-item prepend-icon="mdi-priority-high" title="Priority">
+                                      <template v-slot:append>
+                                          <v-chip :color="getPriorityColor(selectedTaskForDetail.priority)" size="small" label variant="tonal" class="data-table-chip">
+                                            {{ formatPriority(selectedTaskForDetail.priority) }}
+                                          </v-chip>
+                                      </template>
+                                  </v-list-item>
+                                  <v-list-item prepend-icon="mdi-account-outline" title="Assignee">
+                                      <template v-slot:append>
+                                          <span :class="{'text-disabled': !selectedTaskForDetail.assignee}">{{ selectedTaskForDetail.assignee?.username || 'Unassigned' }}</span>
+                                      </template>
+                                  </v-list-item>
+                                  <v-list-item prepend-icon="mdi-calendar-clock" title="Deadline">
+                                      <template v-slot:append>
+                                          <span>{{ formatFullDate(selectedTaskForDetail.deadline) }}</span>
+                                      </template>
+                                  </v-list-item>
+                             </v-list>
+                          </v-col>
+                       </v-row>
+                       <v-divider class="my-4"></v-divider>
+                        <v-row dense>
+                             <v-col cols="12" sm="6">
+                                 <v-list density="compact" class="detail-list bg-transparent">
+                                      <v-list-item prepend-icon="mdi-account-edit-outline" title="Created By">
+                                          <template v-slot:append>
+                                              <span>{{ selectedTaskForDetail.creator?.username || 'Unknown' }}</span>
+                                          </template>
+                                      </v-list-item>
+                                 </v-list>
+                             </v-col>
+                              <v-col cols="12" sm="6">
+                                 <v-list density="compact" class="detail-list bg-transparent">
+                                      <v-list-item prepend-icon="mdi-clock-plus-outline" title="Created On">
+                                          <template v-slot:append>
+                                              <span>{{ formatDateTime(selectedTaskForDetail.created_at) }}</span>
+                                          </template>
+                                      </v-list-item>
+                                 </v-list>
+                             </v-col>
+                        </v-row>
+                  </div>
+                  <div v-else>
+                      <TaskForm
+                          :initial-data="selectedTaskForDetail"
+                          :loading="detailFormSubmitting"
+                          :error="detailFormError"
+                          @submit="onDetailFormSubmit"
+                          @cancel="onDetailFormCancel"
+                          @clear-form-error="clearDetailFormError"
+                          key="task-detail-form-component"
+                          :is-dialog-mode="true"
+                      />
+                  </div>
+                </v-window-item>
+                <v-window-item value="history" class="dialog-window-item">
+                   <TaskHistory v-if="selectedTaskForDetail && detailDialogTab === 'history'" :task-id="selectedTaskForDetail.id" :key="selectedTaskForDetail.id + '-history'" />
+                </v-window-item>
+              </v-window>
             </v-card-text>
-             <!-- Actions might be handled within TaskForm now -->
-             <!-- <v-card-actions v-if="!isEditingDetail" class="dialog-actions pa-3">
-                <v-spacer></v-spacer>
-                <v-btn variant="text" @click="closeDetailDialog" class="dialog-btn-cancel">Close</v-btn>
-            </v-card-actions> -->
         </v-card>
     </v-dialog>
-
-    <v-tooltip location="bottom"></v-tooltip>
 
   </v-container>
 </template>
@@ -367,6 +376,7 @@ import { ref, onMounted, computed, inject, watch, shallowRef } from 'vue';
 import { fetchTasks, createTask as createTaskApi, updateTask as updateTaskApi, deleteTaskApi as deleteTaskServiceApi } from '@/services/taskService';
 import TaskForm from '@/views/tasks/components/TaskForm.vue';
 import TaskDeleteConfirmationDialog from './components/TaskDeleteConfirmationDialog.vue';
+import TaskHistory from './components/TaskHistory.vue';
 import { debounce } from 'lodash';
 import { VTooltip } from 'vuetify/components/VTooltip';
 
@@ -395,6 +405,7 @@ const selectedTaskForDetail = ref(null);
 const isEditingDetail = ref(false);
 const detailFormSubmitting = ref(false);
 const detailFormError = ref(null);
+const detailDialogTab = ref('details');
 
 
 const dataTableHeaders = ref([
@@ -424,12 +435,22 @@ const priorityChoices = [
 
 const hasTasks = computed(() => tasksList.value.length > 0);
 const showErrorAlert = computed(() => !!tasksError.value && !tasksLoading.value);
+
 const showTable = computed(() =>
-  componentReady.value && !tasksLoading.value && !showErrorAlert.value && totalTasks.value > 0
+  componentReady.value &&
+  !tasksLoading.value &&
+  !showErrorAlert.value &&
+  (totalTasks.value > 0 || anyFiltersActive.value)
 );
+
 const showEmptyState = computed(() =>
-  componentReady.value && !tasksLoading.value && !showErrorAlert.value && totalTasks.value === 0 && !anyFiltersActive.value
+  componentReady.value &&
+  !tasksLoading.value &&
+  !showErrorAlert.value &&
+  totalTasks.value === 0 &&
+  !anyFiltersActive.value
 );
+
 const anyFiltersActive = computed(() => {
   return (
     !!search.value ||
@@ -527,6 +548,7 @@ const openDetailDialog = (taskItem) => {
     selectedTaskForDetail.value = { ...taskItem };
     isEditingDetail.value = false;
     detailFormError.value = null;
+    detailDialogTab.value = 'details';
     isDetailDialogOpen.value = true;
 };
 
@@ -535,6 +557,7 @@ const closeDetailDialog = () => {
     selectedTaskForDetail.value = null;
     isEditingDetail.value = false;
     detailFormError.value = null;
+    detailDialogTab.value = 'details';
 };
 
 const onFormSubmit = async (formDataFromForm) => {
@@ -580,18 +603,15 @@ const onDetailFormSubmit = async (formDataFromForm) => {
     }
 
     if (success) {
-        await loadTasks(); // Refresh the main list
-        // Update the currently viewed task data *after* loadTasks completes
-        // Find the updated task in the newly loaded list to ensure consistency
+        await loadTasks();
         const freshTask = tasksList.value.find(t => t.id === selectedTaskForDetail.value.id);
         if (freshTask) {
           selectedTaskForDetail.value = { ...freshTask };
         } else {
-          // Fallback if not found (e.g., pagination changed)
           selectedTaskForDetail.value = { ...selectedTaskForDetail.value, ...updatedTaskData };
         }
 
-        isEditingDetail.value = false; // Switch back to read-only view
+        isEditingDetail.value = false;
         detailFormError.value = null;
     }
 };
@@ -651,7 +671,8 @@ const loadTasks = async () => {
       totalTasks.value = 0;
       console.warn("Received task data in unexpected format:", responseData);
     }
-  } catch (err) {
+  } catch (err)
+{
     tasksError.value = err?.detail || err?.message || 'Could not load tasks.';
     console.error('TaskListView: Could not load tasks.', err);
     tasksList.value = [];
@@ -672,38 +693,41 @@ const updateSort = (newSortState) => {
      sortBy.value = newSortState;
      if (currentPage.value !== 1) {
          currentPage.value = 1;
-     } else {
-         loadTasks();
      }
+     loadTasks();
 };
 
 const onSearchInput = debounce(() => {
   if (currentPage.value !== 1) {
     currentPage.value = 1;
-  } else {
-    loadTasks();
   }
-}, 350);
+  loadTasks();
+}, 600);
 
 watch([selectedStatus, selectedPriority], () => {
     if (currentPage.value !== 1) {
         currentPage.value = 1;
-    } else {
-        loadTasks();
     }
+    loadTasks();
 });
+
+watch(isDetailDialogOpen, (newValue) => {
+  if (!newValue) {
+    detailDialogTab.value = 'details';
+    isEditingDetail.value = false;
+  }
+});
+
 
 const resetFilters = () => {
   search.value = '';
   selectedStatus.value = [];
   selectedPriority.value = [];
 
-  if (currentPage.value !== 1) currentPage.value = 1;
-
-
-  if (currentPage.value === 1) {
-     loadTasks();
+  if (currentPage.value !== 1) {
+    currentPage.value = 1;
   }
+  loadTasks();
 };
 
 const clearComponentError = () => {
@@ -966,7 +990,6 @@ onMounted(() => {
   }
 }
 .dialog-actions {
-   // Use Vuetify classes for spacing if needed e.g., ga-2
 }
 .dialog-btn-cancel {
   color: rgba(var(--v-theme-on-surface), 0.75);
@@ -1001,8 +1024,14 @@ onMounted(() => {
         }
     }
      :deep(.v-list-item) {
-        min-height: 38px; // Reduce min height
+        min-height: 38px;
     }
+}
+.dialog-content-wrapper {
+  min-height: 300px;
+}
+.dialog-window-item {
+  min-height: inherit;
 }
 
 </style>
