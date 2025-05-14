@@ -28,7 +28,7 @@
                 {{ entry.change_description }}
               </v-list-item-title>
               <v-list-item-subtitle class="text-caption text-medium-emphasis">
-                By: {{ entry.user?.username || 'System/Unknown' }} - {{ formatHistoryTimestamp(entry.timestamp) }}
+                {{ formatHistoryTimestamp(entry.timestamp) }}
               </v-list-item-subtitle>
             </v-list-item>
             <v-divider v-if="index < historyEntries.length - 1" class="my-1"></v-divider>

@@ -1,4 +1,3 @@
-# apps/tasks/views.py
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -10,13 +9,14 @@ from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
 from lib.choices import Role
 
-from .models import Task, TaskHistory
-from .serializers import TaskSerializer, TaskHistorySerializer
+from .models import Task, TaskHistory, Comment # Added Comment
+from .serializers import TaskSerializer, TaskHistorySerializer, CommentSerializer # Added CommentSerializer
 from apps.users.permissions import (
     IsAdminOrManagerUser,
-    IsOwnerOrAdminOrManager
+    IsOwnerOrAdminOrManager,
+    IsCommentAuthorOrAdminOrManager # Added Comment Permission
 )
-from .filters import TaskFilter # Import the new filter class
+from .filters import TaskFilter
 
 class TaskPagination(PageNumberPagination):
     page_size = 10
@@ -24,49 +24,32 @@ class TaskPagination(PageNumberPagination):
     max_page_size = 100
 
 class TaskViewSet(viewsets.ModelViewSet):
-    queryset = Task.objects.all().select_related(
-        'assignee__profile', 'creator__profile'
-    ).prefetch_related(
-        'collaborators__profile'
-    )
+    queryset = Task.objects.all().select_related('assignee__profile', 'creator__profile').prefetch_related('collaborators__profile')
     serializer_class = TaskSerializer
     pagination_class = TaskPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_class = TaskFilter # Use the filterset_class instead of filterset_fields
+    filterset_class = TaskFilter
     search_fields = ['title', 'description']
-    ordering_fields = [
-        'created_at', 'updated_at', 'deadline', 'priority', 'status', 'title'
-    ]
+    ordering_fields = ['created_at', 'updated_at', 'deadline', 'priority', 'status', 'title']
     ordering = ['-priority', '-created_at']
 
     def get_queryset(self):
         user = self.request.user
-        if not user.is_authenticated:
-            return Task.objects.none()
-
+        if not user.is_authenticated: return Task.objects.none()
         base_queryset = super().get_queryset()
-
         if hasattr(user, 'profile') and user.profile.role in [Role.ADMIN, Role.MANAGER]:
             return base_queryset
         else:
-            return base_queryset.filter(
-                Q(assignee=user) | Q(creator=user) | Q(collaborators=user)
-            ).distinct()
+            return base_queryset.filter( Q(assignee=user) | Q(creator=user) | Q(collaborators=user) ).distinct()
 
     def get_permissions(self):
-        if self.action == 'create':
-            permission_classes = [IsAdminOrManagerUser]
-        elif self.action in ['update', 'partial_update', 'destroy', 'assign', 'manage_collaborators']:
-            permission_classes = [IsOwnerOrAdminOrManager]
-        else:
-            permission_classes = [permissions.IsAuthenticated]
+        if self.action == 'create': permission_classes = [IsAdminOrManagerUser]
+        elif self.action in ['update', 'partial_update', 'destroy', 'assign', 'manage_collaborators']: permission_classes = [IsOwnerOrAdminOrManager]
+        else: permission_classes = [permissions.IsAuthenticated]
         return [permission() for permission in permission_classes]
 
-    def perform_create(self, serializer):
-        serializer.save(creator=self.request.user)
-
-    def perform_update(self, serializer):
-        serializer.save()
+    def perform_create(self, serializer): serializer.save(creator=self.request.user)
+    def perform_update(self, serializer): serializer.save()
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdminOrManagerUser], url_path='assign')
     def assign(self, request, pk=None):
@@ -98,7 +81,33 @@ class TaskHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         if not IsOwnerOrAdminOrManager().has_object_permission(self.request, self, task):
              raise PermissionDenied("Cannot view history for this task.")
         return TaskHistory.objects.filter(task=task).select_related('user__profile').order_by('-timestamp')
+    def get_permissions(self): return [permission() for permission in self.permission_classes]
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = TaskPagination
+
+    def get_queryset(self):
+        task_pk = self.kwargs.get('task_pk')
+        task = get_object_or_404(Task, pk=task_pk)
+        if not IsOwnerOrAdminOrManager().has_object_permission(self.request, self, task):
+             raise PermissionDenied("You do not have permission to view comments for this task.")
+        return Comment.objects.filter(task=task).select_related('author__profile').order_by('created_at')
+
+    def perform_create(self, serializer):
+        task_pk = self.kwargs.get('task_pk')
+        task = get_object_or_404(Task, pk=task_pk)
+        if not IsOwnerOrAdminOrManager().has_object_permission(self.request, self, task):
+             raise PermissionDenied("You do not have permission to comment on this task.")
+        serializer.save(author=self.request.user, task=task)
 
     def get_permissions(self):
-        return [permission() for permission in self.permission_classes]
-    
+        if self.action in ['update', 'partial_update', 'destroy']:
+            permission_classes = [IsCommentAuthorOrAdminOrManager]
+        elif self.action == 'create':
+             permission_classes = [permissions.IsAuthenticated]
+        else:
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]

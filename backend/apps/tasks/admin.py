@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
-from .models import Task, TaskHistory
+from .models import Task, TaskHistory, Comment # Added Comment
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
@@ -24,3 +24,23 @@ class TaskHistoryAdmin(admin.ModelAdmin):
             link = reverse("admin:tasks_task_change", args=[obj.task.id])
             return format_html('<a href="{}">{}</a>', link, obj.task.title)
         return "Task Deleted"
+
+
+@admin.register(Comment)
+class CommentAdmin(admin.ModelAdmin):
+    list_display = ('task_link', 'author', 'text_snippet', 'created_at', 'updated_at')
+    list_filter = ('author', 'task__title', 'created_at')
+    search_fields = ('text', 'author__username', 'task__title')
+    readonly_fields = ('created_at', 'updated_at')
+    list_select_related = ('task', 'author')
+
+    @admin.display(description='Comment Snippet')
+    def text_snippet(self, obj):
+        return (obj.text[:50] + '...') if len(obj.text) > 50 else obj.text
+
+    @admin.display(description='Task')
+    def task_link(self, obj):
+        if obj.task:
+            link = reverse("admin:tasks_task_change", args=[obj.task.id])
+            return format_html('<a href="{}">{}</a>', link, obj.task.title)
+        return "Task (Unknown or Deleted)"

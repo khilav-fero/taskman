@@ -75,3 +75,29 @@ class TaskHistory(models.Model):
     def __str__(self):
         user_display = self.user.username if self.user else "System/Unknown"
         return f"{self.timestamp.strftime('%Y-%m-%d %H:%M')}: {self.change_description} (by {user_display}) on Task {self.task_id}"
+
+
+class Comment(models.Model):
+    task = models.ForeignKey(
+        Task,
+        verbose_name="Task",
+        on_delete=models.CASCADE,
+        related_name='comments'
+    )
+    author = models.ForeignKey(
+        User,
+        verbose_name="Author",
+        on_delete=models.CASCADE,
+        related_name='task_comments_authored'
+    )
+    text = models.TextField("Text")
+    created_at = models.DateTimeField("Created At", auto_now_add=True)
+    updated_at = models.DateTimeField("Updated At", auto_now=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = "Comment"
+        verbose_name_plural = "Comments"
+
+    def __str__(self):
+        return f"Comment by {self.author.username} on '{self.task.title}'"

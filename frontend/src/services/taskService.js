@@ -1,4 +1,3 @@
-// src/services/taskService.js
 import apiClient from './api';
 
 export const fetchTasks = async (params = {}) => {
@@ -45,8 +44,29 @@ export const fetchTaskHistory = async (taskId) => {
   try {
     const response = await apiClient.get(`/tasks/${taskId}/history/`);
     return response.data;
-  } catch (error) {
+  } catch (error)
+{
     console.error(`API Error fetching history for task ${taskId}:`, error.response?.data || error.message);
+    throw error.response?.data || error;
+  }
+};
+
+export const fetchTaskComments = async (taskId, params = {}) => {
+  try {
+    const response = await apiClient.get(`/tasks/${taskId}/comments/`, { params: params });
+    return response.data;
+  } catch (error) {
+    console.error(`API Error fetching comments for task ${taskId}:`, error.response?.data || error.message);
+    throw error.response?.data || error;
+  }
+};
+
+export const addTaskComment = async (taskId, commentData) => {
+  try {
+    const response = await apiClient.post(`/tasks/${taskId}/comments/`, commentData);
+    return response.data;
+  } catch (error) {
+    console.error(`API Error adding comment for task ${taskId}:`, error.response?.data || error.message);
     throw error.response?.data || error;
   }
 };

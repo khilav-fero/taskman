@@ -1,7 +1,7 @@
 from rest_framework import permissions
 from .models import Profile
 from lib.choices import Role
-from apps.tasks.models import Task
+from apps.tasks.models import Task, Comment # Added Comment import
 
 class IsAdminUser(permissions.BasePermission):
     message = "Access restricted to Admin users."
@@ -29,5 +29,14 @@ class IsOwnerOrAdminOrManager(permissions.BasePermission):
             return (obj.assignee == request.user or
                     obj.creator == request.user or
                     request.user in obj.collaborators.all())
-        return False 
+        return False
 
+class IsCommentAuthorOrAdminOrManager(permissions.BasePermission):
+    message = "You can only modify or delete your own comments."
+    def has_object_permission(self, request, view, obj):
+        if not request.user.is_authenticated: return False
+        if not isinstance(obj, Comment): return False
+
+        if hasattr(request.user, 'profile') and request.user.profile.role in [Role.ADMIN, Role.MANAGER]:
+            return True
+        return obj.author == request.user

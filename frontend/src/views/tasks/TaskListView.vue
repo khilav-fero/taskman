@@ -38,7 +38,6 @@
           :items="tasksList"
           :items-length="totalTasks"
           :loading="tasksLoading"
-          :sort-by="sortBy"
           item-value="id"
           class="flex-grow-1 task-data-table user-data-table"
           fixed-header
@@ -258,7 +257,11 @@
         <v-card v-if="selectedTaskForDetail">
             <v-card-title class="d-flex justify-space-between align-center pa-4">
                 <span class="text-h5">
-                  {{ detailDialogTab === 'details' && isEditingDetail ? 'Edit Task Details' : (detailDialogTab === 'details' ? 'Task Details' : 'Task History') }}
+                  {{ 
+                    detailDialogTab === 'details' && isEditingDetail ? 'Edit Task Details' : 
+                    (detailDialogTab === 'details' ? 'Task Details' : 
+                    (detailDialogTab === 'history' ? 'Task History' : 'Task Comments')) 
+                  }}
                 </span>
                  <div class="dialog-actions">
                     <v-btn
@@ -283,6 +286,7 @@
             <v-tabs v-model="detailDialogTab" color="primary" grow>
                 <v-tab value="details">Details</v-tab>
                 <v-tab value="history">History</v-tab>
+                <v-tab value="comments">Comments</v-tab>
             </v-tabs>
             <v-divider></v-divider>
 
@@ -363,20 +367,26 @@
                 <v-window-item value="history" class="dialog-window-item">
                    <TaskHistory v-if="selectedTaskForDetail && detailDialogTab === 'history'" :task-id="selectedTaskForDetail.id" :key="selectedTaskForDetail.id + '-history'" />
                 </v-window-item>
+                <v-window-item value="comments" class="dialog-window-item">
+                   <TaskComments v-if="selectedTaskForDetail && detailDialogTab === 'comments'" :task-id="selectedTaskForDetail.id" :key="selectedTaskForDetail.id + '-comments'" />
+                </v-window-item>
               </v-window>
             </v-card-text>
         </v-card>
     </v-dialog>
 
+    <v-tooltip location="bottom"></v-tooltip>
+
   </v-container>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, inject, watch, shallowRef } from 'vue';
+import { ref, onMounted, computed, inject, watch, shallowRef, nextTick } from 'vue';
 import { fetchTasks, createTask as createTaskApi, updateTask as updateTaskApi, deleteTaskApi as deleteTaskServiceApi } from '@/services/taskService';
 import TaskForm from '@/views/tasks/components/TaskForm.vue';
 import TaskDeleteConfirmationDialog from './components/TaskDeleteConfirmationDialog.vue';
 import TaskHistory from './components/TaskHistory.vue';
+import TaskComments from './components/TaskComments.vue';
 import { debounce } from 'lodash';
 import { VTooltip } from 'vuetify/components/VTooltip';
 
@@ -435,22 +445,12 @@ const priorityChoices = [
 
 const hasTasks = computed(() => tasksList.value.length > 0);
 const showErrorAlert = computed(() => !!tasksError.value && !tasksLoading.value);
-
 const showTable = computed(() =>
-  componentReady.value &&
-  !tasksLoading.value &&
-  !showErrorAlert.value &&
-  (totalTasks.value > 0 || anyFiltersActive.value)
+  componentReady.value && !tasksLoading.value && !showErrorAlert.value && totalTasks.value > 0
 );
-
 const showEmptyState = computed(() =>
-  componentReady.value &&
-  !tasksLoading.value &&
-  !showErrorAlert.value &&
-  totalTasks.value === 0 &&
-  !anyFiltersActive.value
+  componentReady.value && !tasksLoading.value && !showErrorAlert.value && totalTasks.value === 0 && !anyFiltersActive.value
 );
-
 const anyFiltersActive = computed(() => {
   return (
     !!search.value ||
@@ -689,27 +689,36 @@ const updatePagination = () => {
     loadTasks();
 };
 
+
+const debouncedLoadTasks = debounce(async () => {
+  await nextTick();
+  loadTasks();
+}, 50);
+
+
+const reloadData = (resetPage = true) => {
+  if (resetPage && currentPage.value !== 1) {
+    currentPage.value = 1;
+  } else {
+    debouncedLoadTasks();
+  }
+};
+
+
 const updateSort = (newSortState) => {
-     sortBy.value = newSortState;
-     if (currentPage.value !== 1) {
-         currentPage.value = 1;
-     }
-     loadTasks();
+  sortBy.value = newSortState;
+  reloadData(true);
 };
 
 const onSearchInput = debounce(() => {
-  if (currentPage.value !== 1) {
-    currentPage.value = 1;
-  }
-  loadTasks();
-}, 600);
+  reloadData(true);
+}, 350);
+
 
 watch([selectedStatus, selectedPriority], () => {
-    if (currentPage.value !== 1) {
-        currentPage.value = 1;
-    }
-    loadTasks();
+  reloadData(true);
 });
+
 
 watch(isDetailDialogOpen, (newValue) => {
   if (!newValue) {
@@ -723,11 +732,8 @@ const resetFilters = () => {
   search.value = '';
   selectedStatus.value = [];
   selectedPriority.value = [];
-
-  if (currentPage.value !== 1) {
-    currentPage.value = 1;
-  }
-  loadTasks();
+  sortBy.value = [];
+  reloadData(true);
 };
 
 const clearComponentError = () => {
@@ -1029,9 +1035,15 @@ onMounted(() => {
 }
 .dialog-content-wrapper {
   min-height: 300px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
 }
 .dialog-window-item {
-  min-height: inherit;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 </style>
