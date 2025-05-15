@@ -13,8 +13,22 @@
         variant="tonal"
         density="compact"
         class="mb-4"
+        closable
+        @update:modelValue="fetchError = null"
       >
         {{ fetchError }}
+      </v-alert>
+  
+       <v-alert
+        v-if="deleteError"
+        type="error"
+        variant="tonal"
+        density="compact"
+        class="mb-4"
+        closable
+        @update:modelValue="deleteError = null"
+      >
+        {{ deleteError }}
       </v-alert>
   
       <div v-if="!isLoadingComments && !fetchError" class="comments-list-section">
@@ -28,12 +42,27 @@
                   </span>
                 </v-avatar>
               </template>
-              <div>
-                <div class="d-flex align-center mb-1">
-                  <span class="text-subtitle-2 font-weight-bold mr-2">{{ comment.author?.username || 'Unknown User' }}</span>
-                  <span class="text-caption text-medium-emphasis">{{ formatCommentTimestamp(comment.created_at) }}</span>
+              <div class="comment-content-wrapper">
+                <div class="d-flex align-center justify-space-between mb-1">
+                  <div>
+                      <span class="text-subtitle-3 font-weight-bold mr-2">{{ comment.author?.username || 'Unknown User' }}</span>
+                      <span class="text-caption text-medium-emphasis">{{ formatCommentTimestamp(comment.created_at) }}</span>
+                  </div>
+                  <v-btn
+                      v-if="canCurrentUserDelete(comment)"
+                      icon="mdi-delete-outline"
+                      variant="text"
+                      size="x-large"
+                      color="red"
+                      @click="openDeleteConfirmDialog(comment)"
+                      density="comfortable"
+                      class="ml-auto comment-action-btn"
+                  >
+                      <v-icon size="small">mdi-delete-outline</v-icon>
+                      <v-tooltip activator="parent" location="top">Delete Comment</v-tooltip>
+                  </v-btn>
                 </div>
-                <p class="text-body-2 comment-text" style="white-space: pre-wrap;">{{ comment.text }}</p>
+                <p class="text-body-4 comment-text" style="white-space: pre-wrap;">{{ comment.text }}</p>
               </div>
             </v-list-item>
             <v-divider v-if="index < comments.length - 1" class="my-2"></v-divider>
@@ -70,12 +99,30 @@
           Add Comment
         </v-btn>
       </div>
+  
+      <v-dialog v-model="isDeleteConfirmOpen" max-width="450px" persistent>
+        <v-card>
+          <v-card-title class="text-h6 d-flex align-center">
+            <v-icon color="warning" class="mr-2">mdi-alert-outline</v-icon>
+            Confirm Deletion
+          </v-card-title>
+          <v-card-text>
+            Are you sure you want to delete this comment? This action cannot be undone.
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn text @click="closeDeleteConfirmDialog" :disabled="isDeletingComment">Cancel</v-btn>
+            <v-btn color="error" variant="flat" @click="confirmDeleteComment" :loading="isDeletingComment">Delete</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+  
     </div>
   </template>
   
   <script setup>
-  import { ref, onMounted, watch, inject } from 'vue';
-  import { fetchTaskComments, addTaskComment } from '@/services/taskService';
+  import { ref, onMounted, watch, inject, computed } from 'vue';
+  import { fetchTaskComments, addTaskComment, deleteTaskComment } from '@/services/taskService';
   
   const props = defineProps({
     taskId: {
@@ -93,6 +140,14 @@
   const newCommentText = ref('');
   const isSubmittingComment = ref(false);
   const submitError = ref(null);
+  
+  const isDeleteConfirmOpen = ref(false);
+  const commentToDelete = ref(null);
+  const isDeletingComment = ref(false);
+  const deleteError = ref(null);
+  
+  
+  const userRole = computed(() => currentUser.value?.profile?.role || null);
   
   const loadComments = async () => {
     if (!props.taskId) {
@@ -151,6 +206,42 @@
     }
   };
   
+  const canCurrentUserDelete = (comment) => {
+    if (!currentUser.value || !comment.author) return false;
+    return comment.author.id === currentUser.value.id ||
+           userRole.value === 'ADMIN' ||
+           userRole.value === 'MANAGER';
+  };
+  
+  const openDeleteConfirmDialog = (comment) => {
+    commentToDelete.value = comment;
+    deleteError.value = null;
+    isDeleteConfirmOpen.value = true;
+  };
+  
+  const closeDeleteConfirmDialog = () => {
+    isDeleteConfirmOpen.value = false;
+    commentToDelete.value = null;
+  };
+  
+  const confirmDeleteComment = async () => {
+    if (!commentToDelete.value) return;
+  
+    isDeletingComment.value = true;
+    deleteError.value = null;
+    try {
+      await deleteTaskComment(props.taskId, commentToDelete.value.id);
+      comments.value = comments.value.filter(c => c.id !== commentToDelete.value.id);
+      closeDeleteConfirmDialog();
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+      deleteError.value = err?.detail || err?.message || "Could not delete comment. Please try again.";
+    } finally {
+      isDeletingComment.value = false;
+    }
+  };
+  
+  
   onMounted(() => {
     loadComments();
   });
@@ -160,6 +251,7 @@
       loadComments();
       newCommentText.value = '';
       submitError.value = null;
+      deleteError.value = null;
     } else {
       comments.value = [];
     }
@@ -182,13 +274,22 @@
      padding-left: 0 !important;
      padding-right: 0 !important;
   }
+  .comment-content-wrapper {
+      width: 100%;
+  }
   .comment-text {
     line-height: 1.5;
     color: rgba(var(--v-theme-on-surface), 0.87);
   }
+  .comment-action-btn {
+      opacity: 0.6;
+      &:hover {
+          opacity: 1;
+      }
+  }
   .add-comment-section {
     flex-shrink: 0;
-    padding-top: 8px; // was my-4 on divider
+    padding-top: 8px;
   }
   .add-comment-btn {
     display: flex;

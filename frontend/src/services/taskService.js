@@ -70,3 +70,13 @@ export const addTaskComment = async (taskId, commentData) => {
     throw error.response?.data || error;
   }
 };
+
+export const deleteTaskComment = async (taskId, commentId) => {
+  try {
+    await apiClient.delete(`/tasks/${taskId}/comments/${commentId}/`);
+    return true;
+  } catch (error) {
+    console.error(`API Error deleting comment ${commentId} for task ${taskId}:`, error.response?.data || error.message);
+    throw error.response?.data || error;
+  }
+};

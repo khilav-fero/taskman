@@ -28,7 +28,9 @@
                 {{ entry.change_description }}
               </v-list-item-title>
               <v-list-item-subtitle class="text-caption text-medium-emphasis">
-                {{ formatHistoryTimestamp(entry.timestamp) }}
+                <!-- TEMP DEBUGGING STATEMENTS ADDDED BELOW -->
+                By: {{ entry.user?.username || 'ENTRY NOT RECORDED' }} - {{ formatHistoryTimestamp(entry.timestamp) }}
+                <!-- By: {{ entry.user?.username || 'ENTRY NOT RECORDED' }} - {{ formatHistoryTimestamp(entry.timestamp) }} -->
               </v-list-item-subtitle>
             </v-list-item>
             <v-divider v-if="index < historyEntries.length - 1" class="my-1"></v-divider>

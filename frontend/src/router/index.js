@@ -6,6 +6,7 @@ const LoginPage = () => import('../views/LoginPage.vue');
 const RegisterPage = () => import('../views/RegisterPage.vue');
 const TaskListView = () => import('../views/tasks/TaskListView.vue');
 const UserListView = () => import('../views/users/UserListView.vue');
+const NotificationsPage = () => import('../views/notifications/NotificationsPage.vue');
 
 
 const routes = [
@@ -40,6 +41,11 @@ const routes = [
           requiresAdminOrManager: true,
         },
       },
+      {
+        path: 'notifications',
+        name: 'NotificationsPage',
+        component: NotificationsPage,
+      },
     ]
   },
   {
@@ -50,6 +56,7 @@ const routes = [
         return token ? { name: 'TaskList' } : { name: 'Login' };
     }
   }
+  
 ];
 
 const router = createRouter({

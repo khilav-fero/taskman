@@ -256,7 +256,7 @@
     <v-dialog v-model="isDetailDialogOpen" max-width="800px" scrollable @keydown.esc="closeDetailDialog">
         <v-card v-if="selectedTaskForDetail">
             <v-card-title class="d-flex justify-space-between align-center pa-4">
-                <span class="text-h5">
+                <span class="text-h5 font-weight-bold">
                   {{ 
                     detailDialogTab === 'details' && isEditingDetail ? 'Edit Task Details' : 
                     (detailDialogTab === 'details' ? 'Task Details' : 
