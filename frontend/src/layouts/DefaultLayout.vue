@@ -14,7 +14,7 @@
   >
     <v-list-item
       lines="two"
-      :prepend-avatar="injectedCurrentUser?.profile?.avatar_url || 'https://via.placeholder.com/40/primary/FFFFFF?text=' + ($vuetify.theme.current.colors.primary.substring(1)) + '/FFFFFF?text=' + (injectedCurrentUser?.username?.[0]?.toUpperCase() || 'U')"
+      :prepend-avatar="injectedCurrentUser?.profile?.avatar_url || 'https://via.placeholder.com/40/primary/FFFFFF' + ($vuetify.theme.current.colors.primary.substring(1)) + '/FFFFFF?text=' + (injectedCurrentUser?.username?.[0]?.toUpperCase() || 'U')"
       nav
       class="user-profile-list-item pa-2 mx-1 mt-1"
       min-height="68"
@@ -98,10 +98,16 @@
       size="small"
       class="expand-from-rail-btn"
     ></v-btn>
-    <v-toolbar-title class="app-title d-flex align-center" :class="{'pl-2': shouldShowSidebar && lgAndUp && rail}">
-      <v-icon color="primary" class="mr-2 d-none d-sm-inline-block">mdi-checkbox-marked-circle-auto-outline</v-icon>
-      Taskman
-    </v-toolbar-title>
+<v-toolbar-title
+  class="app-title d-flex flex-row flex-nowrap align-center"
+  :class="{'pl-2': shouldShowSidebar && lgAndUp && rail}"
+>
+  <v-icon
+    color="primary"
+    class="mr-2 d-none d-sm-inline-block"
+  >mdi-checkbox-marked-circle-auto-outline</v-icon>
+  <span class="text-h6 font-weight-bold">Taskman</span>
+</v-toolbar-title>
 
     <v-spacer />
 

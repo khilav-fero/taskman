@@ -34,6 +34,7 @@
           v-if="showTable"
           v-model:items-per-page="itemsPerPage"
           v-model:page="currentPage"
+          v-model:sort-by="sortBy"
           :headers="dataTableHeaders"
           :items="tasksList"
           :items-length="totalTasks"
@@ -46,7 +47,7 @@
           hover
           @update:page="updatePagination"
           @update:itemsPerPage="updatePagination"
-          @update:sortBy="updateSort"
+          @update:options="handleOptionsUpdate"
           @click:row="(_, { item }) => openDetailDialog(item)"
           :row-props="() => ({ class: 'clickable-row' })"
         >
@@ -256,11 +257,12 @@
     <v-dialog v-model="isDetailDialogOpen" max-width="800px" scrollable @keydown.esc="closeDetailDialog">
         <v-card v-if="selectedTaskForDetail">
             <v-card-title class="d-flex justify-space-between align-center pa-4">
-                <span class="text-h5 font-weight-bold">
-                  {{ 
-                    detailDialogTab === 'details' && isEditingDetail ? 'Edit Task Details' : 
-                    (detailDialogTab === 'details' ? 'Task Details' : 
-                    (detailDialogTab === 'history' ? 'Task History' : 'Task Comments')) 
+                <span class="text-h5">
+                  {{
+                    detailDialogTab === 'details' && isEditingDetail ? 'Edit Task Details' :
+                    (detailDialogTab === 'details' ? 'Task Details' :
+                    (detailDialogTab === 'history' ? 'Task History' :
+                    (detailDialogTab === 'comments' ? 'Task Comments' : 'Task Collaborators')))
                   }}
                 </span>
                  <div class="dialog-actions">
@@ -285,8 +287,9 @@
 
             <v-tabs v-model="detailDialogTab" color="primary" grow>
                 <v-tab value="details">Details</v-tab>
-                <v-tab value="history">History</v-tab>
+                <v-tab value="collaborators">Collaborators</v-tab>
                 <v-tab value="comments">Comments</v-tab>
+                <v-tab value="history">History</v-tab>
             </v-tabs>
             <v-divider></v-divider>
 
@@ -364,11 +367,26 @@
                       />
                   </div>
                 </v-window-item>
-                <v-window-item value="history" class="dialog-window-item">
-                   <TaskHistory v-if="selectedTaskForDetail && detailDialogTab === 'history'" :task-id="selectedTaskForDetail.id" :key="selectedTaskForDetail.id + '-history'" />
+                <v-window-item value="collaborators" class="dialog-window-item pa-4">
+                    <TaskCollaborators
+                        v-if="selectedTaskForDetail && detailDialogTab === 'collaborators'"
+                        :task-id="selectedTaskForDetail.id"
+                        :current-collaborators="selectedTaskForDetail.collaborators || []"
+                        :can-manage="canManageTasks"
+                        @collaborator-added="handleCollaboratorChange"
+                        @collaborator-removed="handleCollaboratorChange"
+                        @error="(msg) => taskCollaboratorError = msg"
+                        :key="selectedTaskForDetail.id + '-collaborators'"
+                    />
+                    <v-alert v-if="taskCollaboratorError" type="error" density="compact" variant="tonal" class="mt-3">
+                        {{ taskCollaboratorError }}
+                    </v-alert>
                 </v-window-item>
                 <v-window-item value="comments" class="dialog-window-item">
                    <TaskComments v-if="selectedTaskForDetail && detailDialogTab === 'comments'" :task-id="selectedTaskForDetail.id" :key="selectedTaskForDetail.id + '-comments'" />
+                </v-window-item>
+                <v-window-item value="history" class="dialog-window-item">
+                   <TaskHistory v-if="selectedTaskForDetail && detailDialogTab === 'history'" :task-id="selectedTaskForDetail.id" :key="selectedTaskForDetail.id + '-history'" />
                 </v-window-item>
               </v-window>
             </v-card-text>
@@ -387,6 +405,7 @@ import TaskForm from '@/views/tasks/components/TaskForm.vue';
 import TaskDeleteConfirmationDialog from './components/TaskDeleteConfirmationDialog.vue';
 import TaskHistory from './components/TaskHistory.vue';
 import TaskComments from './components/TaskComments.vue';
+import TaskCollaborators from './components/TaskCollaborators.vue';
 import { debounce } from 'lodash';
 import { VTooltip } from 'vuetify/components/VTooltip';
 
@@ -416,18 +435,69 @@ const isEditingDetail = ref(false);
 const detailFormSubmitting = ref(false);
 const detailFormError = ref(null);
 const detailDialogTab = ref('details');
+const taskCollaboratorError = ref(null);
 
+const sortBy = shallowRef([]);
 
 const dataTableHeaders = ref([
-  { title: 'Title & Description', key: 'title', sortable: true, class: 'text-wrap', minWidth: '300px', width: '35%' },
-  { title: 'Status', key: 'status', sortable: true, width: '130px', align: 'center' },
-  { title: 'Priority', key: 'priority', sortable: true, width: '120px', align: 'center' },
-  { title: 'Assignee', key: 'assignee', sortable: true, value: item => item.assignee?.username, width: '160px' },
-  { title: 'Deadline', key: 'deadline', sortable: true, width: '140px' },
+  {
+    title: 'Title & Description', key: 'title', sortable: true, class: 'text-wrap', minWidth: '300px', width: '35%',
+    sort: (titleA, titleB) => {
+      const valA = titleA?.toLowerCase() ?? null;
+      const valB = titleB?.toLowerCase() ?? null;
+      if (valA === null && valB !== null) return 1;
+      if (valA !== null && valB === null) return -1;
+      if (valA === null && valB === null) return 0;
+      return valA < valB ? -1 : (valA > valB ? 1 : 0);
+    }
+  },
+  {
+    title: 'Status', key: 'status', sortable: true, width: '130px', align: 'center',
+    sort: (statusA, statusB) => {
+      const valA = statusA?.toLowerCase() ?? null;
+      const valB = statusB?.toLowerCase() ?? null;
+      if (valA === null && valB !== null) return 1;
+      if (valA !== null && valB === null) return -1;
+      if (valA === null && valB === null) return 0;
+      return valA < valB ? -1 : (valA > valB ? 1 : 0);
+    }
+  },
+  {
+    title: 'Priority', key: 'priority', sortable: true, width: '120px', align: 'center',
+    sort: (priorityA, priorityB) => {
+      const valA = (priorityA === undefined || priorityA === null) ? null : Number(priorityA);
+      const valB = (priorityB === undefined || priorityB === null) ? null : Number(priorityB);
+      if (valA === null && valB !== null) return 1;
+      if (valA !== null && valB === null) return -1;
+      if (valA === null && valB === null) return 0;
+      return valA - valB;
+    }
+  },
+  {
+    title: 'Assignee', key: 'assignee', sortable: true, value: item => item.assignee?.username, width: '160px',
+    sort: (assigneeA, assigneeB) => {
+      const usernameA = assigneeA?.username?.toLowerCase() || null;
+      const usernameB = assigneeB?.username?.toLowerCase() || null;
+      if (usernameA === null && usernameB !== null) return 1;
+      if (usernameA !== null && usernameB === null) return -1;
+      if (usernameA === null && usernameB === null) return 0;
+      return usernameA < usernameB ? -1 : (usernameA > usernameB ? 1 : 0);
+    }
+  },
+  {
+    title: 'Deadline', key: 'deadline', sortable: true, width: '140px',
+    sort: (deadlineA, deadlineB) => {
+      const dateA = deadlineA ? new Date(deadlineA + 'T00:00:00Z').getTime() : null;
+      const dateB = deadlineB ? new Date(deadlineB + 'T00:00:00Z').getTime() : null;
+      if (dateA === null && dateB !== null) return 1;
+      if (dateA !== null && dateB === null) return -1;
+      if (dateA === null && dateB === null) return 0;
+      return dateA - dateB;
+    }
+  },
   { title: 'Actions', key: 'actions', sortable: false, align: 'center', width: '120px' }
 ]);
 
-const sortBy = shallowRef([]);
 
 const statusChoices = [
   { text: 'To-Do', value: 'TODO' },
@@ -549,6 +619,7 @@ const openDetailDialog = (taskItem) => {
     isEditingDetail.value = false;
     detailFormError.value = null;
     detailDialogTab.value = 'details';
+    taskCollaboratorError.value = null;
     isDetailDialogOpen.value = true;
 };
 
@@ -558,6 +629,7 @@ const closeDetailDialog = () => {
     isEditingDetail.value = false;
     detailFormError.value = null;
     detailDialogTab.value = 'details';
+    taskCollaboratorError.value = null;
 };
 
 const onFormSubmit = async (formDataFromForm) => {
@@ -625,6 +697,19 @@ const clearDetailFormError = () => {
   detailFormError.value = null;
 };
 
+const handleCollaboratorChange = async () => {
+    taskCollaboratorError.value = null;
+    await loadTasks();
+    if (selectedTaskForDetail.value) {
+        const freshTask = tasksList.value.find(t => t.id === selectedTaskForDetail.value.id);
+        if (freshTask) {
+            selectedTaskForDetail.value = { ...freshTask };
+        } else {
+            closeDetailDialog();
+        }
+    }
+};
+
 
 const buildFilterParams = () => {
   const params = {
@@ -644,14 +729,15 @@ const buildFilterParams = () => {
      params.priority__in = selectedPriority.value.join(',');
   }
 
-  if (sortBy.value && sortBy.value.length > 0) {
-    const sortItem = sortBy.value[0];
-    if (sortItem && sortItem.key) {
-        params.ordering = (sortItem.order === 'desc' ? '-' : '') + sortItem.key;
-    }
-  } else {
-      params.ordering = '-priority,-created_at';
-  }
+  // Removed ordering parameter for client-side sorting
+  // if (sortBy.value && sortBy.value.length > 0) {
+  //   const sortItem = sortBy.value[0];
+  //   if (sortItem && sortItem.key) {
+  //       params.ordering = (sortItem.order === 'desc' ? '-' : '') + sortItem.key;
+  //   }
+  // } else {
+  //     params.ordering = '-priority,-created_at';
+  // }
 
   return params;
 };
@@ -689,50 +775,59 @@ const updatePagination = () => {
     loadTasks();
 };
 
-
 const debouncedLoadTasks = debounce(async () => {
   await nextTick();
   loadTasks();
 }, 50);
 
-
 const reloadData = (resetPage = true) => {
   if (resetPage && currentPage.value !== 1) {
-    currentPage.value = 1;
+    currentPage.value = 1; // This will trigger loadTasks via watch on currentPage or @update:page
   } else {
     debouncedLoadTasks();
   }
 };
 
+// This function is no longer directly called by @update:sortBy
+// v-model:sort-by="sortBy" handles updating sortBy directly.
+// The v-data-table will use the custom sort functions in headers.
+// const updateSort = (newSortState) => {
+//   sortBy.value = newSortState;
+//   // No reloadData() for client-side sorting of the current page's data
+// };
 
-const updateSort = (newSortState) => {
-  sortBy.value = newSortState;
-  reloadData(true);
+const handleOptionsUpdate = (options) => {
+
 };
+
 
 const onSearchInput = debounce(() => {
   reloadData(true);
 }, 350);
 
-
 watch([selectedStatus, selectedPriority], () => {
   reloadData(true);
 });
-
 
 watch(isDetailDialogOpen, (newValue) => {
   if (!newValue) {
     detailDialogTab.value = 'details';
     isEditingDetail.value = false;
+    taskCollaboratorError.value = null;
+  } else {
+    taskCollaboratorError.value = null;
   }
 });
 
+watch(detailDialogTab, () => {
+    taskCollaboratorError.value = null;
+});
 
 const resetFilters = () => {
   search.value = '';
   selectedStatus.value = [];
   selectedPriority.value = [];
-  sortBy.value = [];
+  sortBy.value = []; // Clear client-side sort
   reloadData(true);
 };
 

@@ -18,7 +18,17 @@
   
       <v-card :loading="isLoadingList">
         <v-card-title class="d-flex justify-space-between align-center py-2 px-3 text-subtitle-1">
-          Recent Notifications
+          Notifications
+          <v-btn
+            v-if="notifications.some(n => !n.read)"
+            size="small"
+            variant="text"
+            color="primary"
+            @click.stop="handleMarkAllRead"
+            :loading="isMarkingAllRead"
+          >
+            Mark all as read
+          </v-btn>
         </v-card-title>
         <v-divider></v-divider>
   
@@ -30,8 +40,8 @@
           <template v-for="notification in notifications" :key="notification.id">
             <v-list-item
               @click="handleNotificationClick(notification)"
-              class="notification-item"
               :class="{ 'font-weight-bold unread-notification': !notification.read, 'read-notification': notification.read }"
+              class="notification-item"
             >
               <template v-slot:prepend>
                 <v-icon size="small" class="mr-3" :color="!notification.read ? 'primary' : 'grey'">
@@ -64,7 +74,9 @@
   import { useRouter } from 'vue-router';
   import {
     fetchUnreadNotificationCount,
-    fetchNotifications
+    fetchNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead
   } from '@/services/notificationService';
   
   const router = useRouter();
@@ -75,6 +87,7 @@
   const isLoadingList = ref(false);
   const isMenuOpen = ref(false);
   const listError = ref(null);
+  const isMarkingAllRead = ref(false);
   
   const loadUnreadCount = async () => {
     isLoadingCount.value = true;
@@ -106,8 +119,41 @@
   const handleNotificationClick = async (notification) => {
     isMenuOpen.value = false;
     if (notification.related_task) {
-      console.log('Navigate to task ID:', notification.related_task);
       router.push({ name: 'TaskList' });
+    }
+    if (!notification.read) {
+      try {
+        const updatedNotification = await markNotificationAsRead(notification.id);
+        const index = notifications.value.findIndex(n => n.id === notification.id);
+        if (index !== -1) {
+          notifications.value[index] = updatedNotification;
+        }
+        if (unreadCount.value > 0) {
+           const stillUnreadInList = notifications.value.filter(n => !n.read).length;
+           const unreadElsewhere = unreadCount.value - (notifications.value.length - stillUnreadInList);
+           unreadCount.value = Math.max(0, unreadElsewhere + stillUnreadInList -1);
+           if (notifications.value.every(n => n.read)) { // if all in dropdown are read
+              loadUnreadCount(); // refresh count accurately
+           }
+        }
+      } catch (error) {
+        console.error("Failed to mark notification as read", error);
+      }
+    }
+  };
+  
+  const handleMarkAllRead = async () => {
+    isMarkingAllRead.value = true;
+    try {
+      await markAllNotificationsAsRead();
+      notifications.value.forEach(n => n.read = true);
+      unreadCount.value = 0;
+    } catch (error) {
+      console.error("Failed to mark all as read", error);
+      listError.value = "Could not mark all as read.";
+    } finally {
+      isMarkingAllRead.value = false;
+      isMenuOpen.value = false;
     }
   };
   

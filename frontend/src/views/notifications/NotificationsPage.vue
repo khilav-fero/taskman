@@ -1,11 +1,27 @@
 <template>
     <v-container fluid class="pa-md-6 pa-4">
       <div class="d-flex justify-space-between align-center mb-6">
-        <h1 class="text-h4 font-weight-medium">All Notifications</h1>
+        <h1 class="text-h4 font-weight-medium">Notifications</h1>
+        <v-btn
+          v-if="notifications.some(n => !n.read) && !isLoading"
+          color="primary"
+          variant="tonal"
+          @click="handleMarkAllRead"
+          :loading="isMarkingAllRead"
+        >
+          Mark All as Read
+        </v-btn>
       </div>
   
       <v-card :loading="isLoading" variant="flat" class="card-container" rounded="lg">
         <v-card-text class="pa-0">
+          <v-tabs v-model="activeFilter" color="primary" grow @update:model-value="onFilterChange">
+            <v-tab value="all">All</v-tab>
+            <v-tab value="unread">Unread</v-tab>
+            <v-tab value="read">Read</v-tab>
+          </v-tabs>
+          <v-divider></v-divider>
+  
           <v-progress-linear v-if="isLoading" indeterminate color="primary"></v-progress-linear>
   
           <v-alert v-if="error" type="error" variant="tonal" density="compact" class="ma-4">
@@ -28,6 +44,12 @@
                 <v-list-item-title class="text-body-1" style="white-space: normal;">{{ notification.message }}</v-list-item-title>
                 <v-list-item-subtitle class="text-caption">{{ formatRelativeTime(notification.timestamp) }}</v-list-item-subtitle>
   
+                <template v-slot:append v-if="!notification.read">
+                   <v-btn icon variant="text" size="small" @click.stop="markSingleAsRead(notification)">
+                      <v-icon color="primary" title="Mark as read">mdi-check-circle-outline</v-icon>
+                       <v-tooltip activator="parent" location="top">Mark as read</v-tooltip>
+                   </v-btn>
+                </template>
               </v-list-item>
               <v-divider v-if="index < notifications.length - 1"></v-divider>
             </template>
@@ -36,6 +58,7 @@
           <div v-else-if="!isLoading && notifications.length === 0 && !error" class="text-center pa-10 text-medium-emphasis">
             <v-icon size="64" class="mb-3">mdi-email-open-outline</v-icon>
             <p class="text-h6">No notifications to display.</p>
+            <p v-if="activeFilter === 'unread'">You're all caught up!</p>
           </div>
   
           <div v-if="totalPages > 1 && !isLoading" class="text-center pa-4">
@@ -53,10 +76,12 @@
   </template>
   
   <script setup>
-  import { ref, onMounted, computed } from 'vue';
+  import { ref, onMounted, computed, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import {
     fetchNotifications,
+    markNotificationAsRead,
+    markAllNotificationsAsRead
   } from '@/services/notificationService';
   
   const router = useRouter();
@@ -64,10 +89,13 @@
   const notifications = ref([]);
   const isLoading = ref(false);
   const error = ref(null);
+  const isMarkingAllRead = ref(false);
   
   const currentPage = ref(1);
   const itemsPerPage = ref(15);
   const totalNotifications = ref(0);
+  
+  const activeFilter = ref('all');
   
   const totalPages = computed(() => {
     return Math.ceil(totalNotifications.value / itemsPerPage.value);
@@ -81,6 +109,12 @@
         page: currentPage.value,
         page_size: itemsPerPage.value,
       };
+      if (activeFilter.value === 'unread') {
+        params.read = false;
+      } else if (activeFilter.value === 'read') {
+        params.read = true;
+      }
+  
       const data = await fetchNotifications(params);
       notifications.value = data.results || [];
       totalNotifications.value = data.count || 0;
@@ -96,9 +130,49 @@
   
   const handleNotificationClick = async (notification) => {
     if (notification.related_task) {
-       console.log('Navigate to task ID:', notification.related_task);
        router.push({ name: 'TaskList' });
     }
+    if (!notification.read) {
+      await markSingleAsRead(notification);
+    }
+  };
+  
+  const markSingleAsRead = async (notification) => {
+      try {
+        const updatedNotification = await markNotificationAsRead(notification.id);
+        const index = notifications.value.findIndex(n => n.id === notification.id);
+        if (index !== -1) {
+          notifications.value[index] = updatedNotification;
+        }
+        if (activeFilter.value === 'unread') {
+          notifications.value = notifications.value.filter(n => n.id !== notification.id);
+          if (totalNotifications.value > 0) totalNotifications.value--;
+        }
+      } catch (error) {
+        console.error("Failed to mark notification as read", error);
+      }
+  };
+  
+  const handleMarkAllRead = async () => {
+    isMarkingAllRead.value = true;
+    try {
+      await markAllNotificationsAsRead();
+      notifications.value.forEach(n => n.read = true);
+      if (activeFilter.value === 'unread') {
+          notifications.value = [];
+          totalNotifications.value = 0;
+      }
+    } catch (err) {
+      console.error("Failed to mark all as read", err);
+      error.value = "Could not mark all as read.";
+    } finally {
+      isMarkingAllRead.value = false;
+    }
+  };
+  
+  const onFilterChange = () => {
+    currentPage.value = 1;
+    loadNotifications();
   };
   
   const handlePageChange = (page) => {
