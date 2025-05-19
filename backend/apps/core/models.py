@@ -1,25 +1,21 @@
 # apps/core/models.py
 from django.db import models
 from django.contrib.auth.models import User
-from apps.tasks.models import Task
+from apps.tasks.models import Task, Mention # Import Mention
 
 class Notification(models.Model):
-    recipient = models.ForeignKey(
-        User,
-        verbose_name="Recipient",
-        on_delete=models.CASCADE,
-        related_name='notifications'
-    )
+    recipient = models.ForeignKey(User, verbose_name="Recipient", on_delete=models.CASCADE, related_name='notifications')
     message = models.TextField("Message")
     read = models.BooleanField("Read Status", default=False)
     timestamp = models.DateTimeField("Timestamp", auto_now_add=True)
-    related_task = models.ForeignKey(
-        Task,
-        verbose_name="Related Task",
+    related_task = models.ForeignKey(Task, verbose_name="Related Task", on_delete=models.SET_NULL, null=True, blank=True, related_name='related_notifications')
+    related_mention = models.ForeignKey( # Added ForeignKey to Mention
+        Mention,
+        verbose_name="Related Mention",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='related_notifications'
+        related_name='notifications_for_mention'
     )
 
     class Meta:

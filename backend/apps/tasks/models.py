@@ -1,3 +1,4 @@
+# apps/tasks/models.py
 from django.db import models
 from django.contrib.auth.models import User
 from lib.choices import TaskLifecycleStage, TaskPriority
@@ -5,38 +6,11 @@ from lib.choices import TaskLifecycleStage, TaskPriority
 class Task(models.Model):
     title = models.CharField("Title", max_length=200)
     description = models.TextField("Description", blank=True, null=True)
-    status = models.CharField(
-        "Status",
-        max_length=10,
-        choices=TaskLifecycleStage.choices,
-        default=TaskLifecycleStage.TO_DO
-    )
-    priority = models.IntegerField(
-        "Priority",
-        choices=TaskPriority.choices,
-        default=TaskPriority.MEDIUM
-    )
-    assignee = models.ForeignKey(
-        User,
-        verbose_name="Assignee",
-        on_delete=models.SET_NULL,
-        related_name='assigned_tasks',
-        blank=True,
-        null=True
-    )
-    collaborators = models.ManyToManyField(
-        User,
-        verbose_name="Collaborators",
-        related_name='collaborating_tasks',
-        blank=True
-    )
-    creator = models.ForeignKey(
-        User,
-        verbose_name="Creator",
-        on_delete=models.SET_NULL,
-        related_name='created_tasks',
-        null=True
-    )
+    status = models.CharField("Status", max_length=10, choices=TaskLifecycleStage.choices, default=TaskLifecycleStage.TO_DO)
+    priority = models.IntegerField("Priority", choices=TaskPriority.choices, default=TaskPriority.MEDIUM)
+    assignee = models.ForeignKey(User, verbose_name="Assignee", on_delete=models.SET_NULL, related_name='assigned_tasks', blank=True, null=True)
+    collaborators = models.ManyToManyField(User, verbose_name="Collaborators", related_name='collaborating_tasks', blank=True)
+    creator = models.ForeignKey(User, verbose_name="Creator", on_delete=models.SET_NULL, related_name='created_tasks', null=True)
     deadline = models.DateField("Deadline", blank=True, null=True)
     created_at = models.DateTimeField("Created At", auto_now_add=True)
     updated_at = models.DateTimeField("Updated At", auto_now=True)
@@ -51,19 +25,8 @@ class Task(models.Model):
 
 
 class TaskHistory(models.Model):
-    task = models.ForeignKey(
-        Task,
-        verbose_name="Task",
-        on_delete=models.CASCADE,
-        related_name='history'
-    )
-    user = models.ForeignKey(
-        User,
-        verbose_name="User Performing Change",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
+    task = models.ForeignKey(Task, verbose_name="Task", on_delete=models.CASCADE, related_name='history')
+    user = models.ForeignKey(User, verbose_name="User Performing Change", on_delete=models.SET_NULL, null=True, blank=True)
     timestamp = models.DateTimeField("Timestamp", auto_now_add=True)
     change_description = models.CharField("Change Description", max_length=255)
 
@@ -78,18 +41,8 @@ class TaskHistory(models.Model):
 
 
 class Comment(models.Model):
-    task = models.ForeignKey(
-        Task,
-        verbose_name="Task",
-        on_delete=models.CASCADE,
-        related_name='comments'
-    )
-    author = models.ForeignKey(
-        User,
-        verbose_name="Author",
-        on_delete=models.CASCADE,
-        related_name='task_comments_authored'
-    )
+    task = models.ForeignKey(Task, verbose_name="Task", on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(User, verbose_name="Author", on_delete=models.CASCADE, related_name='task_comments_authored')
     text = models.TextField("Text")
     created_at = models.DateTimeField("Created At", auto_now_add=True)
     updated_at = models.DateTimeField("Updated At", auto_now=True)
@@ -101,3 +54,28 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"Comment by {self.author.username} on '{self.task.title}'"
+
+
+class Mention(models.Model):
+    comment = models.ForeignKey(
+        Comment,
+        on_delete=models.CASCADE,
+        related_name='mentions_in_comment',
+        verbose_name="Originating Comment"
+    )
+    mentioned_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='mentions_received',
+        verbose_name="Mentioned User"
+    )
+    created_at = models.DateTimeField("Mentioned At", auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Mention"
+        verbose_name_plural = "Mentions"
+        unique_together = ('comment', 'mentioned_user')
+
+    def __str__(self):
+        return f"User '{self.mentioned_user.username}' mentioned in comment ID {self.comment_id}"
