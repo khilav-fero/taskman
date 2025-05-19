@@ -94,7 +94,7 @@ def process_comment_mentions_and_notifications(sender, instance, created, **kwar
                         comment=comment,
                         mentioned_user=mentioned_user
                     )
-                    if mention_created: # Only notify if it's a new mention for this comment/user pair
+                    if mention_created: 
                         mentioned_users_for_notification.add(mentioned_user)
             except User.DoesNotExist:
                 continue # Username not found, ignore
@@ -119,5 +119,5 @@ def process_comment_mentions_and_notifications(sender, instance, created, **kwar
                 recipient=mentioned_user,
                 message=mention_notification_message,
                 related_task=task,
-                related_mention=mention_instance # Link to the mention record
+                related_mention=mention_instance    
             )

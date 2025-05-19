@@ -52,8 +52,8 @@
                       v-if="canCurrentUserDelete(comment)"
                       icon="mdi-delete-outline"
                       variant="text"
-                      size="x-large"
-                      color="red"
+                      size="x-large" 
+                      color="error" 
                       @click="openDeleteConfirmDialog(comment)"
                       density="comfortable"
                       class="ml-auto comment-action-btn"
@@ -62,7 +62,14 @@
                       <v-tooltip activator="parent" location="top">Delete Comment</v-tooltip>
                   </v-btn>
                 </div>
-                <p class="text-body-4 comment-text" style="white-space: pre-wrap;">{{ comment.text }}</p>
+                <p class="text-body-4 comment-text" style="white-space: pre-wrap;">
+                  <template v-for="(segment, segIndex) in parseCommentTextForMentions(comment.text)" :key="segIndex">
+                    <span v-if="segment.type === 'text'">{{ segment.content }}</span>
+                    <span v-else-if="segment.type === 'mention'" class="comment-mention">
+                      {{ segment.content }}
+                    </span>
+                  </template>
+                </p>
               </div>
             </v-list-item>
             <v-divider v-if="index < comments.length - 1" class="my-2"></v-divider>
@@ -79,7 +86,7 @@
       <div class="add-comment-section">
         <v-textarea
           v-model="newCommentText"
-          label="Add a comment..."
+          label="Add a comment... (use @username for mentions)"
           variant="outlined"
           rows="3"
           auto-grow
@@ -87,17 +94,22 @@
           density="compact"
           class="mb-2"
           :error-messages="submitError ? [submitError] : []"
+          @keydown.enter.ctrl="handleAddComment"
+          @keydown.enter.meta="handleAddComment"
         ></v-textarea>
-        <v-btn
-          color="primary"
-          variant="flat"
-          @click="handleAddComment"
-          :loading="isSubmittingComment"
-          :disabled="!newCommentText.trim() || isSubmittingComment"
-          class="add-comment-btn"
-        >
-          Add Comment
-        </v-btn>
+        <div class="d-flex justify-end align-center">
+           <span class="text-caption text-medium-emphasis mr-2" v-if="newCommentText">Ctrl/Cmd + Enter to submit</span>
+          <v-btn
+            color="primary"
+            variant="flat"
+            @click="handleAddComment"
+            :loading="isSubmittingComment"
+            :disabled="!newCommentText.trim() || isSubmittingComment"
+            class="add-comment-btn"
+          >
+            Add Comment
+          </v-btn>
+        </div>
       </div>
   
       <v-dialog v-model="isDeleteConfirmOpen" max-width="450px" persistent>
@@ -131,7 +143,7 @@
     },
   });
   
-  const currentUser = inject('currentUser', ref(null));
+  const currentUser = inject('currentUser', ref(null)); // Injected from TaskListView or a global provider
   
   const comments = ref([]);
   const isLoadingComments = ref(false);
@@ -146,8 +158,35 @@
   const isDeletingComment = ref(false);
   const deleteError = ref(null);
   
-  
   const userRole = computed(() => currentUser.value?.profile?.role || null);
+  const currentUserId = computed(() => currentUser.value?.id || null);
+  
+  
+  const MENTION_REGEX = /@([a-zA-Z0-9_.-]+)/g; 
+  
+  const parseCommentTextForMentions = (text) => {
+    if (typeof text !== 'string' || !text) return [{ type: 'text', content: text || '' }];
+  
+    const segments = [];
+    let lastIndex = 0;
+    let match;
+  
+    MENTION_REGEX.lastIndex = 0;
+  
+    while ((match = MENTION_REGEX.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        segments.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+      }
+      segments.push({ type: 'mention', content: match[0], username: match[1] });
+      lastIndex = match.index + match[0].length;
+    }
+  
+    if (lastIndex < text.length) {
+      segments.push({ type: 'text', content: text.substring(lastIndex) });
+    }
+    
+    return segments.length > 0 ? segments : [{ type: 'text', content: text }];
+  };
   
   const loadComments = async () => {
     if (!props.taskId) {
@@ -158,7 +197,8 @@
     fetchError.value = null;
     try {
       const data = await fetchTaskComments(props.taskId);
-      comments.value = data.results || [];
+      const rawComments = Array.isArray(data) ? data : (data.results || []);
+      comments.value = rawComments.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     } catch (err) {
       console.error("Failed to load task comments:", err);
       fetchError.value = err?.detail || err?.message || "Could not load comments. Please try again.";
@@ -175,7 +215,7 @@
     submitError.value = null;
     try {
       const newComment = await addTaskComment(props.taskId, { text: newCommentText.value.trim() });
-      comments.value.push(newComment);
+      comments.value.push(newComment); 
       newCommentText.value = '';
     } catch (err) {
       console.error("Failed to add comment:", err);
@@ -202,20 +242,21 @@
       if (diffDays < 7) return `${diffDays}d ago`;
       return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } catch (e) {
-      return timestamp;
+      // Fallback for invalid date strings
+      return String(timestamp).substring(0, 10);
     }
   };
   
   const canCurrentUserDelete = (comment) => {
-    if (!currentUser.value || !comment.author) return false;
-    return comment.author.id === currentUser.value.id ||
+    if (!currentUserId.value || !comment.author || comment.author.id === undefined) return false;
+    return comment.author.id === currentUserId.value ||
            userRole.value === 'ADMIN' ||
            userRole.value === 'MANAGER';
   };
   
   const openDeleteConfirmDialog = (comment) => {
     commentToDelete.value = comment;
-    deleteError.value = null;
+    deleteError.value = null; // Clear previous delete errors
     isDeleteConfirmOpen.value = true;
   };
   
@@ -246,14 +287,14 @@
     loadComments();
   });
   
-  watch(() => props.taskId, (newTaskId) => {
-    if (newTaskId) {
+  watch(() => props.taskId, (newTaskId, oldTaskId) => {
+    if (newTaskId && newTaskId !== oldTaskId) {
       loadComments();
-      newCommentText.value = '';
+      newCommentText.value = ''; // Clear input when task changes
       submitError.value = null;
       deleteError.value = null;
-    } else {
-      comments.value = [];
+    } else if (!newTaskId) {
+      comments.value = []; // Clear comments if no task ID
     }
   });
   </script>
@@ -262,40 +303,52 @@
   .task-comments-container {
     display: flex;
     flex-direction: column;
-    min-height: 300px;
+    min-height: 300px; // Ensure it has some space
   }
   .comments-list-section {
     flex-grow: 1;
     overflow-y: auto;
-    max-height: 350px;
+
+    max-height: calc(70vh - 120px - 48px - 120px); // Example, adjust as needed
+    padding-right: 4px; // For scrollbar
   }
   .comment-item {
     align-items: flex-start;
-     padding-left: 0 !important;
+     padding-left: 0 !important; // Override Vuetify default list padding
      padding-right: 0 !important;
   }
   .comment-content-wrapper {
-      width: 100%;
+      width: 100%; // Ensure it takes full width within list item
   }
   .comment-text {
     line-height: 1.5;
-    color: rgba(var(--v-theme-on-surface), 0.87);
+    color: rgba(var(--v-theme-on-surface), 0.87); // Standard text color
+  }
+  .comment-mention {
+    font-weight: 600; // Make it slightly bolder
+    color: rgb(var(--v-theme-primary)); // Use primary theme color
+
+    cursor: default; // Or 'pointer' if you add click actions
   }
   .comment-action-btn {
-      opacity: 0.6;
+      opacity: 0.5; // Make it less prominent until hover
+      transition: opacity 0.2s ease-in-out;
       &:hover {
           opacity: 1;
       }
   }
   .add-comment-section {
-    flex-shrink: 0;
-    padding-top: 8px;
+    flex-shrink: 0; // Prevent this section from shrinking
+    padding-top: 12px; // Space above input
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    margin-top: 12px;
   }
   .add-comment-btn {
-    display: flex;
-    margin-left: auto;
+    // display: flex; // Not needed if using d-flex on parent
+    // margin-left: auto; // Not needed if using d-flex on parent
   }
   
+  // Ensure prepend avatar aligns to the top with text
   :deep(.v-list-item__prepend) {
     align-self: flex-start !important;
   }
