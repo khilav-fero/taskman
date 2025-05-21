@@ -191,7 +191,7 @@
       listError.value = null;
       loadRecentNotifications();
     }
-  };
+  };    
   
   onMounted(() => {
     loadUnreadCount();
