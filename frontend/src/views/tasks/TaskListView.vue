@@ -46,6 +46,7 @@
           density="comfortable"
           hover
           @update:page="updatePagination"
+          
           @update:itemsPerPage="updatePagination"
           @update:options="handleOptionsUpdate"
           @click:row="(_, { item }) => openDetailDialog(item)"
