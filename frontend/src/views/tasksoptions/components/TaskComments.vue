@@ -132,171 +132,171 @@
     </div>
   </template>
   
-  <script setup>
-  import { ref, onMounted, watch, inject, computed } from 'vue';
+  <script>
+  import { ref } from 'vue'; // Only needed if a default for inject is a ref, otherwise can be removed
   import { fetchTaskComments, addTaskComment, deleteTaskComment } from '@/services/taskService';
   
-  const props = defineProps({
-    taskId: {
-      type: [String, Number],
-      required: true,
+  const MENTION_REGEX = /@([a-zA-Z0-9_.-]+)/g;
+  
+  export default {
+    name: 'TaskComments',
+    props: {
+      taskId: {
+        type: [String, Number],
+        required: true,
+      },
     },
-  });
-  
-  const currentUser = inject('currentUser', ref(null)); // Injected from TaskListView or a global provider
-  
-  const comments = ref([]);
-  const isLoadingComments = ref(false);
-  const fetchError = ref(null);
-  
-  const newCommentText = ref('');
-  const isSubmittingComment = ref(false);
-  const submitError = ref(null);
-  
-  const isDeleteConfirmOpen = ref(false);
-  const commentToDelete = ref(null);
-  const isDeletingComment = ref(false);
-  const deleteError = ref(null);
-  
-  const userRole = computed(() => currentUser.value?.profile?.role || null);
-  const currentUserId = computed(() => currentUser.value?.id || null);
-  
-  
-  const MENTION_REGEX = /@([a-zA-Z0-9_.-]+)/g; 
-  
-  const parseCommentTextForMentions = (text) => {
-    if (typeof text !== 'string' || !text) return [{ type: 'text', content: text || '' }];
-  
-    const segments = [];
-    let lastIndex = 0;
-    let match;
-  
-    MENTION_REGEX.lastIndex = 0;
-  
-    while ((match = MENTION_REGEX.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        segments.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+    inject: {
+      currentUserInjected: {
+        from: 'currentUser',
+        default: null, // currentUser is provided as an object, not a ref, based on previous fixes
       }
-      segments.push({ type: 'mention', content: match[0], username: match[1] });
-      lastIndex = match.index + match[0].length;
+    },
+    data() {
+      return {
+        comments: [],
+        isLoadingComments: false,
+        fetchError: null,
+        newCommentText: '',
+        isSubmittingComment: false,
+        submitError: null,
+        isDeleteConfirmOpen: false,
+        commentToDelete: null,
+        isDeletingComment: false,
+        deleteError: null,
+      };
+    },
+    computed: {
+      currentUser() {
+        return this.currentUserInjected; // Access the unwrapped (or directly provided) object
+      },
+      userRole() {
+        return this.currentUser?.profile?.role || null;
+      },
+      currentUserId() {
+        return this.currentUser?.id || null;
+      }
+    },
+    watch: {
+      taskId(newTaskId, oldTaskId) {
+        if (newTaskId && newTaskId !== oldTaskId) {
+          this.loadComments();
+          this.newCommentText = '';
+          this.submitError = null;
+          this.deleteError = null;
+        } else if (!newTaskId) {
+          this.comments = [];
+        }
+      }
+    },
+    methods: {
+      parseCommentTextForMentions(text) {
+        if (typeof text !== 'string' || !text) return [{ type: 'text', content: text || '' }];
+        const segments = [];
+        let lastIndex = 0;
+        let match;
+        MENTION_REGEX.lastIndex = 0;
+        while ((match = MENTION_REGEX.exec(text)) !== null) {
+          if (match.index > lastIndex) {
+            segments.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+          }
+          segments.push({ type: 'mention', content: match[0], username: match[1] });
+          lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex < text.length) {
+          segments.push({ type: 'text', content: text.substring(lastIndex) });
+        }
+        return segments.length > 0 ? segments : [{ type: 'text', content: text }];
+      },
+      async loadComments() {
+        if (!this.taskId) {
+          this.comments = [];
+          return;
+        }
+        this.isLoadingComments = true;
+        this.fetchError = null;
+        try {
+          const data = await fetchTaskComments(this.taskId);
+          const rawComments = Array.isArray(data) ? data : (data.results || []);
+          this.comments = rawComments.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        } catch (err) {
+          console.error("Failed to load task comments:", err);
+          this.fetchError = err?.detail || err?.message || "Could not load comments. Please try again.";
+          this.comments = [];
+        } finally {
+          this.isLoadingComments = false;
+        }
+      },
+      async handleAddComment() {
+        if (!this.newCommentText.trim()) return;
+        this.isSubmittingComment = true;
+        this.submitError = null;
+        try {
+          const newComment = await addTaskComment(this.taskId, { text: this.newCommentText.trim() });
+          this.comments.push(newComment);
+          this.newCommentText = '';
+        } catch (err) {
+          console.error("Failed to add comment:", err);
+          this.submitError = err?.detail || err?.message || "Could not add comment. Please try again.";
+        } finally {
+          this.isSubmittingComment = false;
+        }
+      },
+      formatCommentTimestamp(timestamp) {
+        if (!timestamp) return '';
+        try {
+          const date = new Date(timestamp);
+          const now = new Date();
+          const diffSeconds = Math.round((now - date) / 1000);
+          const diffMinutes = Math.round(diffSeconds / 60);
+          const diffHours = Math.round(diffMinutes / 60);
+          const diffDays = Math.round(diffHours / 24);
+  
+          if (diffSeconds < 60) return 'just now';
+          if (diffMinutes < 60) return `${diffMinutes}m ago`;
+          if (diffHours < 24) return `${diffHours}h ago`;
+          if (diffDays === 1) return 'yesterday';
+          if (diffDays < 7) return `${diffDays}d ago`;
+          return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        } catch (e) {
+          return String(timestamp).substring(0, 10);
+        }
+      },
+      canCurrentUserDelete(comment) {
+        if (!this.currentUserId || !comment.author || comment.author.id === undefined) return false;
+        return comment.author.id === this.currentUserId ||
+               this.userRole === 'ADMIN' ||
+               this.userRole === 'MANAGER';
+      },
+      openDeleteConfirmDialog(comment) {
+        this.commentToDelete = comment;
+        this.deleteError = null;
+        this.isDeleteConfirmOpen = true;
+      },
+      closeDeleteConfirmDialog() {
+        this.isDeleteConfirmOpen = false;
+        this.commentToDelete = null;
+      },
+      async confirmDeleteComment() {
+        if (!this.commentToDelete) return;
+        this.isDeletingComment = true;
+        this.deleteError = null;
+        try {
+          await deleteTaskComment(this.taskId, this.commentToDelete.id);
+          this.comments = this.comments.filter(c => c.id !== this.commentToDelete.id);
+          this.closeDeleteConfirmDialog();
+        } catch (err) {
+          console.error("Failed to delete comment:", err);
+          this.deleteError = err?.detail || err?.message || "Could not delete comment. Please try again.";
+        } finally {
+          this.isDeletingComment = false;
+        }
+      }
+    },
+    mounted() {
+      this.loadComments();
     }
-  
-    if (lastIndex < text.length) {
-      segments.push({ type: 'text', content: text.substring(lastIndex) });
-    }
-    
-    return segments.length > 0 ? segments : [{ type: 'text', content: text }];
   };
-  
-  const loadComments = async () => {
-    if (!props.taskId) {
-      comments.value = [];
-      return;
-    }
-    isLoadingComments.value = true;
-    fetchError.value = null;
-    try {
-      const data = await fetchTaskComments(props.taskId);
-      const rawComments = Array.isArray(data) ? data : (data.results || []);
-      comments.value = rawComments.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    } catch (err) {
-      console.error("Failed to load task comments:", err);
-      fetchError.value = err?.detail || err?.message || "Could not load comments. Please try again.";
-      comments.value = [];
-    } finally {
-      isLoadingComments.value = false;
-    }
-  };
-  
-  const handleAddComment = async () => {
-    if (!newCommentText.value.trim()) return;
-  
-    isSubmittingComment.value = true;
-    submitError.value = null;
-    try {
-      const newComment = await addTaskComment(props.taskId, { text: newCommentText.value.trim() });
-      comments.value.push(newComment); 
-      newCommentText.value = '';
-    } catch (err) {
-      console.error("Failed to add comment:", err);
-      submitError.value = err?.detail || err?.message || "Could not add comment. Please try again.";
-    } finally {
-      isSubmittingComment.value = false;
-    }
-  };
-  
-  const formatCommentTimestamp = (timestamp) => {
-    if (!timestamp) return '';
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffSeconds = Math.round((now - date) / 1000);
-      const diffMinutes = Math.round(diffSeconds / 60);
-      const diffHours = Math.round(diffMinutes / 60);
-      const diffDays = Math.round(diffHours / 24);
-  
-      if (diffSeconds < 60) return 'just now';
-      if (diffMinutes < 60) return `${diffMinutes}m ago`;
-      if (diffHours < 24) return `${diffHours}h ago`;
-      if (diffDays === 1) return 'yesterday';
-      if (diffDays < 7) return `${diffDays}d ago`;
-      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    } catch (e) {
-      // Fallback for invalid date strings
-      return String(timestamp).substring(0, 10);
-    }
-  };
-  
-  const canCurrentUserDelete = (comment) => {
-    if (!currentUserId.value || !comment.author || comment.author.id === undefined) return false;
-    return comment.author.id === currentUserId.value ||
-           userRole.value === 'ADMIN' ||
-           userRole.value === 'MANAGER';
-  };
-  
-  const openDeleteConfirmDialog = (comment) => {
-    commentToDelete.value = comment;
-    deleteError.value = null; // Clear previous delete errors
-    isDeleteConfirmOpen.value = true;
-  };
-  
-  const closeDeleteConfirmDialog = () => {
-    isDeleteConfirmOpen.value = false;
-    commentToDelete.value = null;
-  };
-  
-  const confirmDeleteComment = async () => {
-    if (!commentToDelete.value) return;
-  
-    isDeletingComment.value = true;
-    deleteError.value = null;
-    try {
-      await deleteTaskComment(props.taskId, commentToDelete.value.id);
-      comments.value = comments.value.filter(c => c.id !== commentToDelete.value.id);
-      closeDeleteConfirmDialog();
-    } catch (err) {
-      console.error("Failed to delete comment:", err);
-      deleteError.value = err?.detail || err?.message || "Could not delete comment. Please try again.";
-    } finally {
-      isDeletingComment.value = false;
-    }
-  };
-  
-  
-  onMounted(() => {
-    loadComments();
-  });
-  
-  watch(() => props.taskId, (newTaskId, oldTaskId) => {
-    if (newTaskId && newTaskId !== oldTaskId) {
-      loadComments();
-      newCommentText.value = ''; // Clear input when task changes
-      submitError.value = null;
-      deleteError.value = null;
-    } else if (!newTaskId) {
-      comments.value = []; // Clear comments if no task ID
-    }
-  });
   </script>
   
   <style lang="scss" scoped>

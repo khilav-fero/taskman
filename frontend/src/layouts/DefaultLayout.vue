@@ -98,16 +98,16 @@
       size="small"
       class="expand-from-rail-btn"
     ></v-btn>
-<v-toolbar-title
-  class="app-title d-flex flex-row flex-nowrap align-center"
-  :class="{'pl-2': shouldShowSidebar && lgAndUp && rail}"
->
-  <v-icon
-    color="primary"
-    class="mr-2 d-none d-sm-inline-block"
-  >mdi-checkbox-marked-circle-auto-outline</v-icon>
-  <span class="text-h6 font-weight-bold">Taskman</span>
-</v-toolbar-title>
+    <v-toolbar-title
+      class="app-title d-flex flex-row flex-nowrap align-center"
+      :class="{'pl-2': shouldShowSidebar && lgAndUp && rail}"
+    >
+      <v-icon
+        color="primary"
+        class="mr-2 d-none d-sm-inline-block"
+      >mdi-checkbox-marked-circle-auto-outline</v-icon>
+      <span class="text-h6 font-weight-bold">Taskman</span>
+    </v-toolbar-title>
 
     <v-spacer />
 
@@ -142,14 +142,13 @@ const route = useRoute();
 const router = useRouter();
 
 const injectedCurrentUser = inject('currentUser');
-const isUserAuthenticated = inject('isAuthenticated'); 
+const isUserAuthenticated = inject('isAuthenticated');
 
 const userRole = computed(() => injectedCurrentUser.value?.profile?.role || null);
 
 const drawerVisibleState = ref(lgAndUp.value);
 const rail = ref(lgAndUp.value);
 const drawerHovering = ref(false);
-
 
 const shouldShowSidebar = computed(() => {
   return isUserAuthenticated.value && !route.meta.hideSidebar;
@@ -174,9 +173,9 @@ watch(shouldShowSidebar, (newVal) => {
     }
 }, { immediate: true });
 
-
 const navigationItems = ref([
   { title: 'Tasks', icon: 'mdi-view-list-outline', value: 'tasks', routeName: 'TaskList', requiresAuth: true },
+  { title: 'Tasks (Options)', icon: 'mdi-cogs', value: 'tasks-options', routeName: 'TaskListOptions', requiresAuth: true },
   { title: 'Users', icon: 'mdi-account-group-outline', value: 'users', routeName: 'UserList', requiresAdminOrManager: true, requiresAuth: true },
   { title: 'Notifications', icon: 'mdi-bell-outline', value: 'notifications', routeName: 'NotificationsPage', requiresAuth: true },
 ]);

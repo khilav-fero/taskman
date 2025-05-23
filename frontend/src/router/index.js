@@ -7,6 +7,7 @@ const RegisterPage = () => import('../views/RegisterPage.vue');
 const TaskListView = () => import('../views/tasks/TaskListView.vue');
 const UserListView = () => import('../views/users/UserListView.vue');
 const NotificationsPage = () => import('../views/notifications/NotificationsPage.vue');
+const TaskListOptionsView = () => import('../views/tasksoptions/TaskListView.vue');
 
 
 const routes = [
@@ -34,6 +35,11 @@ const routes = [
         component: TaskListView,
       },
       {
+        path: 'tasks-options',
+        name: 'TaskListOptions',
+        component: TaskListOptionsView,
+      },
+      {
         path: 'users',
         name: 'UserList',
         component: UserListView,
@@ -56,7 +62,7 @@ const routes = [
         return token ? { name: 'TaskList' } : { name: 'Login' };
     }
   }
-  
+
 ];
 
 const router = createRouter({
@@ -82,7 +88,7 @@ router.beforeEach(async (to, from, next) => {
 
   const needsAuth = to.matched.some(record => record.meta.requiresAuth);
   const needsGuest = to.matched.some(record => record.meta.requiresGuest);
-  
+
   if (needsAuth && !isAuthenticated) {
     next({ name: 'Login', query: { redirect: to.fullPath } });
   } else if (needsGuest && isAuthenticated) {

@@ -44,63 +44,68 @@
     </div>
   </template>
   
-  <script setup>
-  import { ref, onMounted, watch } from 'vue';
+  <script>
   import { fetchTaskHistory } from '@/services/taskService';
   
-  const props = defineProps({
-    taskId: {
-      type: [String, Number],
-      required: true,
+  export default {
+    name: 'TaskHistory', 
+    props: {
+      taskId: {
+        type: [String, Number],
+        required: true,
+      },
     },
-  });
-  
-  const historyEntries = ref([]);
-  const isLoading = ref(false);
-  const error = ref(null);
-  
-  const loadHistory = async () => {
-    if (!props.taskId) {
-      historyEntries.value = [];
-      return;
-    }
-    isLoading.value = true;
-    error.value = null;
-    try {
-      const data = await fetchTaskHistory(props.taskId);
-      historyEntries.value = data.results || [];
-    } catch (err) {
-      console.error("Failed to load task history:", err);
-      error.value = err?.detail || err?.message || "Could not load task history. Please try again.";
-       historyEntries.value = [];
-    } finally {
-      isLoading.value = false;
+    data() {
+      return {
+        historyEntries: [],
+        isLoading: false,
+        error: null,
+      };
+    },
+    watch: {
+      taskId(newTaskId) {
+        if (newTaskId) {
+          this.loadHistory();
+        } else {
+          this.historyEntries = [];
+        }
+      }
+    },
+    methods: {
+      async loadHistory() {
+        if (!this.taskId) {
+          this.historyEntries = [];
+          return;
+        }
+        this.isLoading = true;
+        this.error = null;
+        try {
+          const data = await fetchTaskHistory(this.taskId);
+          this.historyEntries = data.results || [];
+        } catch (err) {
+          console.error("Failed to load task history:", err);
+          this.error = err?.detail || err?.message || "Could not load task history. Please try again.";
+          this.historyEntries = [];
+        } finally {
+          this.isLoading = false;
+        }
+      },
+      formatHistoryTimestamp(timestamp) {
+        if (!timestamp) return '';
+        try {
+          return new Date(timestamp).toLocaleString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true
+          });
+        } catch (e) {
+          return timestamp;
+        }
+      }
+    },
+    mounted() {
+      this.loadHistory();
     }
   };
-  
-  const formatHistoryTimestamp = (timestamp) => {
-    if (!timestamp) return '';
-    try {
-      return new Date(timestamp).toLocaleString(undefined, {
-        year: 'numeric', month: 'short', day: 'numeric',
-        hour: 'numeric', minute: '2-digit', hour12: true
-      });
-    } catch (e) {
-      return timestamp;
-    }
-  };
-  
-  onMounted(() => {
-    loadHistory();
-  });
-  
-  watch(() => props.taskId, (newTaskId) => {
-    if (newTaskId) {
-      loadHistory();
-    } else {
-      historyEntries.value = [];
-    }
-  });
   </script>
   
   <style lang="scss" scoped>

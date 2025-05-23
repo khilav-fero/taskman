@@ -32,9 +32,9 @@
                 color="primary"
                 class="form-field-themed"
                 autofocus
-                :error-messages="v$.title.$errors.map(e => e.$message)"
-                @blur="v$.title.$touch()"
-                @input="v$.title.$validate()"
+                :error-messages="v$.formData.title.$errors.map(e => e.$message)"
+                @blur="v$.formData.title.$touch()"
+                @input="v$.formData.title.$validate()"
               />
             </v-col>
 
@@ -45,9 +45,9 @@
                 counter
                 color="primary"
                 class="form-field-themed"
-                :error-messages="v$.description.$errors.map(e => e.$message)"
-                @blur="v$.description.$touch()"
-                @input="v$.description.$validate()"
+                :error-messages="v$.formData.description.$errors.map(e => e.$message)"
+                @blur="v$.formData.description.$touch()"
+                @input="v$.formData.description.$validate()"
               />
             </v-col>
 
@@ -59,9 +59,9 @@
                   color="primary"
                   class="form-field-themed"
                   prepend-inner-icon="mdi-list-status"
-                  :error-messages="v$.status.$errors.map(e => e.$message)"
-                  @blur="v$.status.$touch()"
-                  @update:modelValue="v$.status.$validate()"
+                  :error-messages="v$.formData.status.$errors.map(e => e.$message)"
+                  @blur="v$.formData.status.$touch()"
+                  @update:modelValue="v$.formData.status.$validate()"
               />
             </v-col>
 
@@ -73,9 +73,9 @@
                   color="primary"
                   class="form-field-themed"
                   prepend-inner-icon="mdi-priority-high"
-                  :error-messages="v$.priority.$errors.map(e => e.$message)"
-                  @blur="v$.priority.$touch()"
-                  @update:modelValue="v$.priority.$validate()"
+                  :error-messages="v$.formData.priority.$errors.map(e => e.$message)"
+                  @blur="v$.formData.priority.$touch()"
+                  @update:modelValue="v$.formData.priority.$validate()"
               />
             </v-col>
 
@@ -94,9 +94,9 @@
                   color="primary"
                   class="form-field-themed"
                   prepend-inner-icon="mdi-account-outline"
-                  :error-messages="v$.assignee_id.$errors.map(e => e.$message)"
-                  @blur="v$.assignee_id.$touch()"
-                  @update:modelValue="v$.assignee_id.$validate()"
+                  :error-messages="v$.formData.assignee_id.$errors.map(e => e.$message)"
+                  @blur="v$.formData.assignee_id.$touch()"
+                  @update:modelValue="v$.formData.assignee_id.$validate()"
                />
             </v-col>
 
@@ -113,13 +113,13 @@
                   :dark="isDark"
                   :prevent-min-max-navigation="true"
                   :month-change-on-scroll="false"
-                  @update:model-value="v$.deadline.$touch(); v$.deadline.$validate()"
-                  @closed="v$.deadline.$touch()"
+                  @update:model-value="v$.formData.deadline.$touch(); v$.formData.deadline.$validate()"
+                  @closed="v$.formData.deadline.$touch()"
               />
-              <div v-if="v$.deadline.$errors.length" class="v-input__details" style="padding-inline-start: 16px; padding-inline-end: 16px;">
+              <div v-if="v$.formData.deadline.$errors.length" class="v-input__details" style="padding-inline-start: 16px; padding-inline-end: 16px;">
                 <div class="v-messages">
-                  <div v-for="error in v$.deadline.$errors" :key="error.$uid" class="v-messages__message text-error">
-                    {{ error.$message }}
+                  <div v-for="errorMsg in v$.formData.deadline.$errors" :key="errorMsg.$uid" class="v-messages__message text-error">
+                    {{ errorMsg.$message }}
                   </div>
                 </div>
               </div>
@@ -141,171 +141,186 @@
   </v-card>
 </template>
 
-<script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue';
+<script>
 import { taskStatusChoices, taskPriorityChoices } from '@/lib/choices';
 import VueDatePicker from '@vuepic/vue-datepicker';
 import '@vuepic/vue-datepicker/dist/main.css';
-import { useTheme } from 'vuetify';
 import { fetchAllUsers } from '@/services/userService';
 import { useVuelidate } from '@vuelidate/core';
-import { required, minLength, maxLength, helpers } from '@vuelidate/validators';
+import { required, maxLength, helpers } from '@vuelidate/validators';
 
-const props = defineProps({
-  initialData: { type: Object, default: null },
-  loading: { type: Boolean, default: false },
-  error: { type: String, default: null }
-});
-
-const emit = defineEmits(['submit', 'cancel', 'clear-form-error']);
-
-const theme = useTheme();
-const isDark = computed(() => theme.global.current.value.dark);
-
-const vuetifyFormRef = ref(null);
-const assignableUsers = ref([]);
-const usersLoading = ref(false);
-const usersLoadingInitial = ref(true);
-
-const defaultFormData = () => ({
-  title: '',
-  description: '',
-  status: 'TODO',
-  priority: 2,
-  deadline: null,
-  assignee_id: null,
-});
-
-const formData = reactive(defaultFormData());
-
-const isEditMode = computed(() => props.initialData && props.initialData.id);
-const formTitle = computed(() => isEditMode.value ? 'Edit Task' : 'Create New Task');
-
-const isValidDateOrNull = (value) => {
-  if (value === null || value === undefined || value === '') return true;
-  return !isNaN(new Date(value).getTime());
-};
-
-const validationRules = computed(() => ({
-  title: {
-    required: helpers.withMessage('Title is required.', required),
-    maxLength: helpers.withMessage('Title cannot exceed 200 characters.', maxLength(200))
+export default {
+  name: 'TaskForm',
+  components: {
+    VueDatePicker
   },
-  description: {
-    maxLength: helpers.withMessage('Description cannot exceed 1000 characters.', maxLength(1000)) 
+  props: {
+    initialData: { type: Object, default: null },
+    loading: { type: Boolean, default: false },
+    error: { type: String, default: null }
   },
-  status: {
-    required: helpers.withMessage('Status is required.', required)
+  emits: ['submit', 'cancel', 'clear-form-error'],
+  data() {
+    return {
+      v$: useVuelidate(),
+      formData: this._defaultFormData(),
+      assignableUsers: [],
+      usersLoading: false,
+      usersLoadingInitial: true,
+      taskStatusChoices: taskStatusChoices,
+      taskPriorityChoices: taskPriorityChoices,
+    };
   },
-  priority: {
-    required: helpers.withMessage('Priority is required.', required)
+  validations() {
+    return {
+      formData: {
+        title: {
+          required: helpers.withMessage('Title is required.', required),
+          maxLength: helpers.withMessage('Title cannot exceed 200 characters.', maxLength(200))
+        },
+        description: {
+          maxLength: helpers.withMessage('Description cannot exceed 1000 characters.', maxLength(1000))
+        },
+        status: {
+          required: helpers.withMessage('Status is required.', required)
+        },
+        priority: {
+          required: helpers.withMessage('Priority is required.', required)
+        },
+        assignee_id: {},
+        deadline: {
+          isValidDateOrNull: helpers.withMessage('Please select a valid date.', this.isValidDateOrNull)
+        }
+      }
+    };
   },
-  assignee_id: {},
-  deadline: {
-    isValidDateOrNull: helpers.withMessage('Please select a valid date.', isValidDateOrNull)
-  }
-}));
-
-const v$ = useVuelidate(validationRules, formData);
-
-const loadUsers = async () => {
-  usersLoading.value = true;
-  if (assignableUsers.value.length === 0) {
-    usersLoadingInitial.value = true;
-  }
-  try {
-    const response = await fetchAllUsers();
-    if (response && Array.isArray(response.results)) {
-      assignableUsers.value = response.results;
-    } else if (Array.isArray(response)) {
-      assignableUsers.value = response;
-    } else {
-      assignableUsers.value = [];
-      console.warn("TaskForm: fetchAllUsers did not return expected 'results' array EXPLICIT ERROR WITH TASKFORM.");
+  computed: {
+    isDark() {
+      return this.$vuetify.theme.current.dark;
+    },
+    isEditMode() {
+      return this.initialData && this.initialData.id;
+    },
+    formTitle() {
+      return this.isEditMode ? 'Edit Task' : 'Create New Task';
     }
-  } catch (error) {
-    console.error("TaskForm: Failed to load users for assignee select:", error);
-    assignableUsers.value = [];
-  } finally {
-    usersLoading.value = false;
-    usersLoadingInitial.value = false;
-  }
-};
-
-const resetForm = () => {
-  Object.assign(formData, defaultFormData());
-  if (v$.value) {
-    v$.value.$reset();
-  }
-  if (vuetifyFormRef.value) {
-    vuetifyFormRef.value.resetValidation();
-  }
-};
-
-const populateForm = (newData) => {
-  // resetForm(); // Reset first to clear Vuelidate and apply defaults
-  if (newData && newData.id) {
-    formData.title = newData.title || '';
-    formData.description = newData.description || '';
-    formData.status = newData.status || 'TODO';
-    formData.priority = newData.priority || 2;
-    formData.deadline = newData.deadline ? new Date(newData.deadline + 'T00:00:00Z') : null;
-    formData.assignee_id = newData.assignee_id || newData.assignee?.id || null;
-  } else {
-     Object.assign(formData, defaultFormData());
-  }
-   if (v$.value) {
-    v$.value.$reset();
-  }
-};
-
-watch(() => props.initialData, (newData) => {
-  populateForm(newData);
-}, { immediate: true, deep: true });
-
-const submitForm = async () => {
-  v$.value.$touch();
-  const isFormValid = await v$.value.$validate();
-
-  if (!isFormValid) {
-    const { valid: vuetifyValid } = await vuetifyFormRef.value.validate(); // Also trigger Vuetify's visual validation
-    return;
-  }
-
-  const payload = {
-      title: formData.title,
-      description: formData.description || null,
-      status: formData.status,
-      priority: formData.priority,
-      assignee_id: formData.assignee_id || null,
-  };
-
-  if (formData.deadline instanceof Date) {
+  },
+  watch: {
+    initialData: {
+      handler(newData) {
+        this.populateForm(newData);
+      },
+      immediate: true,
+      deep: true
+    }
+  },
+  methods: {
+    _defaultFormData() {
+      return {
+        title: '',
+        description: '',
+        status: 'TODO',
+        priority: 2,
+        deadline: null,
+        assignee_id: null,
+      };
+    },
+    isValidDateOrNull(value) {
+      if (value === null || value === undefined || value === '') return true;
+      return !isNaN(new Date(value).getTime());
+    },
+    async loadUsers() {
+      this.usersLoading = true;
+      if (this.assignableUsers.length === 0) {
+        this.usersLoadingInitial = true;
+      }
       try {
-          const year = formData.deadline.getFullYear();
-          const month = (formData.deadline.getMonth() + 1).toString().padStart(2, '0');
-          const day = formData.deadline.getDate().toString().padStart(2, '0');
-          payload.deadline = `${year}-${month}-${day}`;
-      } catch (e) { payload.deadline = null; }
-  } else if (formData.deadline === null || formData.deadline === '') {
-      payload.deadline = null;
-  } else {
-      payload.deadline = formData.deadline;
-  }
-  emit('submit', payload);
-};
+        const response = await fetchAllUsers();
+        if (response && Array.isArray(response.results)) {
+          this.assignableUsers = response.results;
+        } else if (Array.isArray(response)) {
+          this.assignableUsers = response;
+        } else {
+          this.assignableUsers = [];
+          console.warn("TaskForm: fetchAllUsers did not return expected 'results' array EXPLICIT ERROR WITH TASKFORM.");
+        }
+      } catch (error) {
+        console.error("TaskForm: Failed to load users for assignee select:", error);
+        this.assignableUsers = [];
+      } finally {
+        this.usersLoading = false;
+        this.usersLoadingInitial = false;
+      }
+    },
+    resetForm() {
+      this.formData = this._defaultFormData();
+      if (this.v$) {
+        this.v$.$reset();
+      }
+      if (this.$refs.vuetifyFormRef) {
+        this.$refs.vuetifyFormRef.resetValidation();
+      }
+    },
+    populateForm(newData) {
+      if (newData && newData.id) {
+        this.formData.title = newData.title || '';
+        this.formData.description = newData.description || '';
+        this.formData.status = newData.status || 'TODO';
+        this.formData.priority = newData.priority || 2;
+        this.formData.deadline = newData.deadline ? new Date(newData.deadline + 'T00:00:00Z') : null;
+        this.formData.assignee_id = newData.assignee_id || newData.assignee?.id || null;
+      } else {
+        this.formData = this._defaultFormData();
+      }
+      if (this.v$) {
+        this.v$.$reset();
+      }
+    },
+    async submitForm() {
+      this.v$.$touch();
+      const isFormValid = await this.v$.$validate();
 
-const cancelForm = () => {
-  resetForm();
-  emit('cancel');
-};
+      if (!isFormValid) {
+        if (this.$refs.vuetifyFormRef) {
+            await this.$refs.vuetifyFormRef.validate();
+        }
+        return;
+      }
 
-onMounted(() => {
-  loadUsers();
-  if (!props.initialData) {
-     Object.assign(formData, defaultFormData());
+      const payload = {
+          title: this.formData.title,
+          description: this.formData.description || null,
+          status: this.formData.status,
+          priority: this.formData.priority,
+          assignee_id: this.formData.assignee_id || null,
+      };
+
+      if (this.formData.deadline instanceof Date && !isNaN(this.formData.deadline.getTime())) {
+          try {
+              const year = this.formData.deadline.getFullYear();
+              const month = (this.formData.deadline.getMonth() + 1).toString().padStart(2, '0');
+              const day = this.formData.deadline.getDate().toString().padStart(2, '0');
+              payload.deadline = `${year}-${month}-${day}`;
+          } catch (e) { payload.deadline = null; }
+      } else if (this.formData.deadline === null || this.formData.deadline === '') {
+          payload.deadline = null;
+      } else {
+          payload.deadline = this.formData.deadline;
+      }
+      this.$emit('submit', payload);
+    },
+    cancelForm() {
+      this.resetForm();
+      this.$emit('cancel');
+    }
+  },
+  mounted() {
+    this.loadUsers();
+    if (!this.initialData) {
+       this.formData = this._defaultFormData();
+    }
   }
-});
+};
 </script>
 
 <style lang="scss">
@@ -356,18 +371,18 @@ onMounted(() => {
   width: 100%;
   box-sizing: border-box;
   font-size: 1rem;
-  height: 40px !important; // Vuetify 'comfortable' density is 40px
+  height: 40px !important;
   line-height: 40px !important;
   background-color: rgba(var(--v-theme-on-surface), 0.04) !important;
   color: rgb(var(--v-theme-on-surface)) !important;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-  font-family: inherit; // Ensure it matches Vuetify's font
+  font-family: inherit;
 }
 .dp-custom-input:hover {
   border-color: rgba(var(--v-theme-on-surface), 0.35) !important;
 }
 .dp-custom-input:focus, .dp-custom-input.dp__input_focus,
-.dp-custom-input.dp__input_invalid { // Style for Vuelidate error state
+.dp-custom-input.dp__input_invalid {
   border-color: rgb(var(--v-theme-primary)) !important;
   box-shadow: 0 0 0 3px rgba(var(--v-theme-primary-rgb), 0.12) !important;
   outline: none;

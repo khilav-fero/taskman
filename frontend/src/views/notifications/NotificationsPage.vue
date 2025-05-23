@@ -102,14 +102,128 @@
   const isMarkingAllRead = ref(false);
   
   const itemsPerPage = ref(15);
-  const nextPageUrl = ref(null);
+  const nextPageUrl = ref(null); // Still here for API version, unused by mock
   const noMoreNotifications = ref(false);
   const activeFilter = ref('all');
   
   const scrollSentinelRef = ref(null);
   let observer = null;
   
+  // --- START MOCK DATA GENERATION ---
+  let allMockNotifications = [];
+  let mockCurrentPageIndex = 0;
+  const USE_MOCK_DATA = false; // SET TO true TO USE MOCK DATA, false FOR API
+  
+  function generateMockNotifications(count = 50) {
+    const mockNotificationsList = [];
+    const messages = [
+      "Your task 'Deploy to Production' is due tomorrow.",
+      "Alice commented on 'User Authentication Flow': 'Looks good to me!'",
+      "Bob assigned you to 'Fix Login Bug'.",
+      "The status of 'API Integration' was changed to In Progress.",
+      "You were mentioned in 'Project Alpha Kickoff' by Charlie: '@testuser can you confirm your availability?'",
+      "New task 'Client Demo Prep' was created by David.",
+      "Deadline for 'Documentation Review' is approaching.",
+      "Eve updated the description for 'UI Mockups V2'.",
+      "Frank added you as a collaborator to 'Security Audit'.",
+      "Grace marked 'Performance Testing' as Done."
+    ];
+    const usernames = ["alice", "bob", "charlie", "david", "eve", "frank", "grace", "heidi", "ivan"];
+  
+    for (let i = 0; i < count; i++) {
+      const randomMessageIndex = Math.floor(Math.random() * messages.length);
+      const randomUsernameIndex = Math.floor(Math.random() * usernames.length);
+      const randomTimestampMillis = new Date().getTime() - Math.floor(Math.random() * 1000 * 60 * 60 * 24 * 30);
+  
+      let readStatus = Math.random() < 0.7;
+      if (activeFilter.value === 'unread') readStatus = false;
+      else if (activeFilter.value === 'read') readStatus = true;
+  
+  
+      mockNotificationsList.push({
+        id: `mock-${Date.now()}-${i}-${Math.random()}`,
+        message: messages[randomMessageIndex],
+        timestamp: new Date(randomTimestampMillis).toISOString(),
+        read: readStatus,
+        related_task: Math.random() < 0.5 ? Math.floor(Math.random() * 100) + 1 : null,
+        actor: { username: usernames[randomUsernameIndex] }
+      });
+    }
+    return mockNotificationsList.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+  
+  const loadMockInitialNotifications = () => {
+    isLoadingInitial.value = true;
+    error.value = null;
+    notifications.value = [];
+    noMoreNotifications.value = false;
+    mockCurrentPageIndex = 0;
+  
+    if (allMockNotifications.length === 0 || activeFilter.value !== 'all') { // Regenerate if filter changes from all
+        allMockNotifications = generateMockNotifications(200);
+    }
+  
+    let filteredMocks = allMockNotifications;
+    if (activeFilter.value === 'unread') {
+      filteredMocks = allMockNotifications.filter(n => !n.read);
+    } else if (activeFilter.value === 'read') {
+      filteredMocks = allMockNotifications.filter(n => n.read);
+    }
+    
+    // Store filtered mocks to paginate from them correctly
+    // This simulates what the backend filter would do
+    const currentFilteredSet = [...filteredMocks];
+  
+  
+    const startIndex = mockCurrentPageIndex * itemsPerPage.value;
+    const endIndex = startIndex + itemsPerPage.value;
+    const pageResults = currentFilteredSet.slice(startIndex, endIndex);
+  
+    notifications.value = pageResults;
+    mockCurrentPageIndex++;
+  
+    if (endIndex >= currentFilteredSet.length) {
+      noMoreNotifications.value = true;
+    }
+    isLoadingInitial.value = false;
+  };
+  
+  const loadMockMoreNotifications = async () => {
+    if (isLoadingMore.value || noMoreNotifications.value) return;
+  
+    isLoadingMore.value = true;
+  
+    let filteredMocks = allMockNotifications;
+     if (activeFilter.value === 'unread') {
+      filteredMocks = allMockNotifications.filter(n => !n.read);
+    } else if (activeFilter.value === 'read') {
+      filteredMocks = allMockNotifications.filter(n => n.read);
+    }
+    const currentFilteredSet = [...filteredMocks];
+  
+    const startIndex = mockCurrentPageIndex * itemsPerPage.value;
+    const endIndex = startIndex + itemsPerPage.value;
+    const pageResults = currentFilteredSet.slice(startIndex, endIndex);
+  
+    await new Promise(resolve => setTimeout(resolve, 300));
+  
+    notifications.value.push(...pageResults);
+    mockCurrentPageIndex++;
+  
+    if (endIndex >= currentFilteredSet.length) {
+      noMoreNotifications.value = true;
+    }
+    isLoadingMore.value = false;
+  };
+  // --- END MOCK DATA GENERATION ---
+  
   const loadInitialNotifications = async () => {
+    if (USE_MOCK_DATA) {
+      loadMockInitialNotifications();
+      setTimeout(() => setupIntersectionObserver(), 0); // Ensure observer is setup after mock data potentially fills screen
+      return;
+    }
+  
     isLoadingInitial.value = true;
     error.value = null;
     notifications.value = [];
@@ -135,18 +249,22 @@
       } else if (!nextPageUrl.value && (data.count !== undefined && data.results !==undefined && data.count === data.results.length)) {
         noMoreNotifications.value = true;
       }
-  
     } catch (err) {
       console.error("Failed to load initial notifications:", err);
       error.value = "Could not load notifications. Please try again.";
       notifications.value = [];
     } finally {
       isLoadingInitial.value = false;
-      setupIntersectionObserver(); // Re-setup observer after initial load or filter change
+      setupIntersectionObserver();
     }
   };
   
   const loadMoreNotifications = async () => {
+    if (USE_MOCK_DATA) {
+      loadMockMoreNotifications();
+      return;
+    }
+  
     if (isLoadingMore.value || !nextPageUrl.value || noMoreNotifications.value) {
       return;
     }
@@ -155,14 +273,13 @@
     error.value = null;
   
     try {
-      // fetchNotifications expects a params object, so we parse the URL
       const url = new URL(nextPageUrl.value);
       const params = {};
       url.searchParams.forEach((value, key) => {
         params[key] = value;
       });
       
-      const data = await fetchNotifications(params); // Use the full next page URL
+      const data = await fetchNotifications(params);
       notifications.value.push(...(data.results || []));
       nextPageUrl.value = data.next || null;
       if (!nextPageUrl.value) {
@@ -183,25 +300,28 @@
     if (!scrollSentinelRef.value) return;
   
     const options = {
-      root: null, //relative to document viewport
+      root: null,
       rootMargin: '0px',
-      threshold: 0.5 // Trigger when 50% of the sentinel is visible
+      threshold: 0.5
     };
   
     observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !isLoadingInitial.value && !isLoadingMore.value && nextPageUrl.value && !noMoreNotifications.value) {
-        loadMoreNotifications();
+      if (entries[0].isIntersecting && !isLoadingInitial.value && !isLoadingMore.value && !noMoreNotifications.value) {
+        if (USE_MOCK_DATA || nextPageUrl.value) { // Check nextPageUrl only if not using mocks
+           loadMoreNotifications();
+        }
       }
     }, options);
   
-    observer.observe(scrollSentinelRef.value);
+    if (scrollSentinelRef.value) {
+      observer.observe(scrollSentinelRef.value);
+    }
   };
   
   
   const handleNotificationClick = async (notification) => {
-    // Navigation logic can be more complex, e.g., based on notification.type
     if (notification.related_task) {
-       router.push({ name: 'TaskList', query: { openTaskDetail: notification.related_task } }); // Example
+       router.push({ name: 'TaskList', query: { openTaskDetail: notification.related_task } });
     }
     if (!notification.read) {
       await markSingleAsRead(notification);
@@ -209,35 +329,56 @@
   };
   
   const markSingleAsRead = async (notification) => {
-      if (notification.read) return; // Already read
+      if (notification.read && !USE_MOCK_DATA) return;
+      
+      if (USE_MOCK_DATA) {
+          const index = notifications.value.findIndex(n => n.id === notification.id);
+          if (index !== -1) {
+              notifications.value[index].read = true;
+              if (activeFilter.value === 'unread') {
+                  notifications.value = notifications.value.filter(n => !n.read);
+                   if (notifications.value.length === 0) noMoreNotifications.value = true;
+              }
+          }
+          return;
+      }
+  
       try {
         const updatedNotification = await markNotificationAsRead(notification.id);
         const index = notifications.value.findIndex(n => n.id === notification.id);
         if (index !== -1) {
           notifications.value[index] = { ...notifications.value[index], ...updatedNotification, read: true };
+          if (activeFilter.value === 'unread') {
+             notifications.value = notifications.value.filter(n => !n.read);
+             if (notifications.value.length === 0) noMoreNotifications.value = true; // If unread list becomes empty
+          }
         }
-        // Optionally re-evaluate noMoreNotifications if filter is 'unread' and list becomes empty
-        if (activeFilter.value === 'unread' && notifications.value.every(n => n.read)) {
-          // Could trigger a small reload or just set noMoreNotifications if appropriate
-        }
-  
       } catch (error) {
         console.error("Failed to mark notification as read", error);
-        // Potentially show a small, non-blocking error to the user
       }
   };
   
   const handleMarkAllRead = async () => {
     isMarkingAllRead.value = true;
+  
+    if (USE_MOCK_DATA) {
+        notifications.value.forEach(n => n.read = true);
+        if (activeFilter.value === 'unread') {
+            notifications.value = [];
+            noMoreNotifications.value = true;
+        }
+        isMarkingAllRead.value = false;
+        return;
+    }
+  
     try {
       await markAllNotificationsAsRead();
-      // Refetch or optimistically update
       notifications.value.forEach(n => {
           if (!n.read) n.read = true;
       });
        if (activeFilter.value === 'unread') {
           notifications.value = [];
-          noMoreNotifications.value = true; // All unread are now read, so no more unread to load
+          noMoreNotifications.value = true;
       }
     } catch (err) {
       console.error("Failed to mark all as read", err);
@@ -276,16 +417,9 @@
     if (messageLower.includes('task created')) return 'mdi-file-document-plus-outline';
     return 'mdi-information-outline';
   };
-
-  
   
   onMounted(() => {
     loadInitialNotifications();
-    // Setup observer after initial content might be present
-    // Vue.nextTick is not directly available in setup, use setTimeout or watch scrollSentinelRef
-    setTimeout(() => {
-       setupIntersectionObserver();
-    }, 0);
   });
   
   onBeforeUnmount(() => {
@@ -295,7 +429,7 @@
   });
   
   watch(activeFilter, () => {
-      // Observer will be re-setup in loadInitialNotifications's finally block
+      // The observer is re-setup in loadInitialNotifications's finally block
   });
   
   </script>
@@ -304,24 +438,24 @@
   .notification-page-container {
     display: flex;
     flex-direction: column;
-    height: 100%; /* Or calc(100vh - header_height) if applicable */
+    height: 100%;
   }
   .card-container {
     border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden; /* Important for managing internal scrolling */
+    overflow: hidden;
   }
   .v-card-text {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden; /* Also important */
+    overflow: hidden;
   }
   .notification-list-wrapper {
     flex-grow: 1;
-    overflow-y: auto; /* This is where the list itself scrolls */
+    overflow-y: auto;
   }
   .unread-notification {
     background-color: rgba(var(--v-theme-primary-rgb), 0.05);
@@ -341,7 +475,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%; /* Take full height of its scrollable container */
-    min-height: 200px; /* Ensure it's visible even if container is small */
+    height: 100%;
+    min-height: 200px;
   }
   </style>

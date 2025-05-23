@@ -33,53 +33,60 @@
     </v-dialog>
   </template>
   
-  <script setup>
-  import { ref } from 'vue';
+  <script>
   import { deleteTaskApi as deleteTaskServiceApi } from '@/services/taskService';
   
-  const props = defineProps({
-    modelValue: Boolean,
-    taskToDelete: {
-      type: Object,
-      default: null,
+  export default {
+    name: 'TaskDeleteConfirmationDialog',
+    props: {
+      modelValue: Boolean,
+      taskToDelete: {
+        type: Object,
+        default: null,
+      },
     },
-  });
-  
-  const emit = defineEmits(['update:modelValue', 'confirmed', 'error']);
-  
-  const submitting = ref(false);
-  const error = ref(null);
-  
-  const closeInternally = (value = false) => {
-    emit('update:modelValue', typeof value === 'boolean' ? value : false);
-    if (!value) {
-      error.value = null;
-    }
-  };
-  
-  const clearError = () => {
-    error.value = null;
-  };
-  
-  const confirmDeleteInternal = async () => {
-    if (!props.taskToDelete?.id) return;
-    submitting.value = true;
-    error.value = null;
-    try {
-      await deleteTaskServiceApi(props.taskToDelete.id);
-      emit('confirmed');
-      closeInternally(false);
-    } catch (err) {
-      let errorMessage = 'Failed to delete task.';
-      if (err?.detail) errorMessage = err.detail;
-      else if (typeof err === 'string') errorMessage = err;
-      else if (err?.message) errorMessage = err.message;
-      error.value = errorMessage;
-      emit('error', error.value);
-      console.error("Failed to delete task:", err);
-    } finally {
-      submitting.value = false;
-    }
+    emits: ['update:modelValue', 'confirmed', 'error'],
+    data() {
+      return {
+        submitting: false,
+        error: null,
+      };
+    },
+    methods: {
+      closeInternally(value = false) {
+        this.$emit('update:modelValue', typeof value === 'boolean' ? value : false);
+        if (!value) {
+          this.error = null;
+        }
+      },
+      clearError() {
+        this.error = null;
+      },
+      async confirmDeleteInternal() {
+        if (!this.taskToDelete?.id) return;
+        this.submitting = true;
+        this.error = null;
+        try {
+          await deleteTaskServiceApi(this.taskToDelete.id);
+          this.$emit('confirmed');
+          this.closeInternally(false);
+        } catch (err) {
+          let errorMessage = 'Failed to delete task.';
+          if (err?.detail) {
+            errorMessage = err.detail;
+          } else if (typeof err === 'string') {
+            errorMessage = err;
+          } else if (err?.message) {
+            errorMessage = err.message;
+          }
+          this.error = errorMessage;
+          this.$emit('error', this.error);
+          console.error("Failed to delete task:", err);
+        } finally {
+          this.submitting = false;
+        }
+      },
+    },
   };
   </script>
   

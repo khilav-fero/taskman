@@ -104,136 +104,139 @@
     </div>
   </template>
   
-  <script setup>
-  import { ref, watch, computed } from 'vue';
+  <script>
   import { fetchUsers, addCollaborator, removeCollaborator } from '@/services/collaboratorService';
   import { debounce } from 'lodash';
   
-  const props = defineProps({
-    taskId: {
-      type: [String, Number],
-      required: true,
+  export default {
+    name: 'TaskCollaborators', // Assuming component name
+    props: {
+      taskId: {
+        type: [String, Number],
+        required: true,
+      },
+      currentCollaborators: {
+        type: Array,
+        default: () => [],
+      },
+      canManage: {
+        type: Boolean,
+        default: false,
+      },
     },
-    currentCollaborators: {
-      type: Array,
-      default: () => [],
+    emits: ['collaborator-added', 'collaborator-removed', 'error'],
+    data() {
+      return {
+        displayedCollaborators: [],
+        showAddCollaboratorDialog: false,
+        userSearchText: '',
+        potentialCollaborators: [],
+        isLoadingUsers: false,
+        selectedUserToAdd: null,
+        isAddingCollaborator: false,
+        addCollaboratorError: null,
+        isRemovingCollaboratorId: null,
+        error: null,
+      };
     },
-    canManage: {
-      type: Boolean,
-      default: false,
-    },
-  });
-  
-  const emit = defineEmits(['collaborator-added', 'collaborator-removed', 'error']);
-  
-  const displayedCollaborators = ref([]);
-  const showAddCollaboratorDialog = ref(false);
-  const userSearchText = ref('');
-  const potentialCollaborators = ref([]);
-  const isLoadingUsers = ref(false);
-  const selectedUserToAdd = ref(null);
-  const isAddingCollaborator = ref(false);
-  const addCollaboratorError = ref(null);
-  const isRemovingCollaboratorId = ref(null);
-  const error = ref(null);
-  
-  const alreadyCollaboratorIds = computed(() => {
-    return displayedCollaborators.value.map(c => c.id);
-  });
-  
-  watch(
-    () => props.currentCollaborators,
-    (newVal) => {
-      displayedCollaborators.value = [...(newVal || [])];
-    },
-    { immediate: true, deep: true }
-  );
-  
-  const openAddDialog = () => {
-    selectedUserToAdd.value = null;
-    userSearchText.value = '';
-    potentialCollaborators.value = [];
-    addCollaboratorError.value = null;
-    showAddCollaboratorDialog.value = true;
-  };
-  
-  const closeAddDialog = () => {
-    showAddCollaboratorDialog.value = false;
-  };
-  
-  const debouncedSearchUsers = debounce(async (searchText) => {
-    if (!searchText || searchText.length < 2) {
-      potentialCollaborators.value = [];
-      return;
-    }
-    isLoadingUsers.value = true;
-    addCollaboratorError.value = null;
-    try {
-      const data = await fetchUsers({ search: searchText, page_size: 10 });
-      potentialCollaborators.value = (data.results || []).filter(
-          user => !alreadyCollaboratorIds.value.includes(user.id)
-      );
-    } catch (err) {
-      console.error("Failed to search users:", err);
-      addCollaboratorError.value = "Failed to fetch users.";
-      potentialCollaborators.value = [];
-    } finally {
-      isLoadingUsers.value = false;
-    }
-  }, 550);
-  
-  watch(userSearchText, (newVal) => {
-    if (selectedUserToAdd.value && newVal !== selectedUserToAdd.value.username) {
-      selectedUserToAdd.value = null;
-    }
-    debouncedSearchUsers(newVal);
-  });
-  
-  const confirmAddCollaborator = async () => {
-    if (!selectedUserToAdd.value || !selectedUserToAdd.value.id) return;
-  
-    if (alreadyCollaboratorIds.value.includes(selectedUserToAdd.value.id)) {
-        addCollaboratorError.value = `${selectedUserToAdd.value.username} is already a collaborator.`;
-        return;
-    }
-  
-    isAddingCollaborator.value = true;
-    addCollaboratorError.value = null;
-    try {
-      await addCollaborator(props.taskId, selectedUserToAdd.value.id);
-      displayedCollaborators.value.push(selectedUserToAdd.value);
-      emit('collaborator-added', selectedUserToAdd.value);
-      closeAddDialog();
-    } catch (err) {
-      console.error("Failed to add collaborator:", err);
-      addCollaboratorError.value = err?.detail || err?.status || err?.warning || "Could not add collaborator.";
-      if (err?.warning) {
-          const alreadyAddedUser = potentialCollaborators.value.find(u => u.id === selectedUserToAdd.value.id);
-          if (alreadyAddedUser && !alreadyCollaboratorIds.value.includes(alreadyAddedUser.id)) {
-              displayedCollaborators.value.push(alreadyAddedUser);
-          }
+    computed: {
+      alreadyCollaboratorIds() {
+        return this.displayedCollaborators.map(c => c.id);
       }
-    } finally {
-      isAddingCollaborator.value = false;
+    },
+    watch: {
+      currentCollaborators: {
+        handler(newVal) {
+          this.displayedCollaborators = [...(newVal || [])];
+        },
+        immediate: true,
+        deep: true
+      },
+      userSearchText(newVal) {
+        if (this.selectedUserToAdd && newVal !== this.selectedUserToAdd.username) {
+          this.selectedUserToAdd = null;
+        }
+        this.debouncedSearchUsers(newVal);
+      }
+    },
+    created() {
+      this.debouncedSearchUsers = debounce(async (searchText) => {
+        if (!searchText || searchText.length < 2) {
+          this.potentialCollaborators = [];
+          return;
+        }
+        this.isLoadingUsers = true;
+        this.addCollaboratorError = null;
+        try {
+          const data = await fetchUsers({ search: searchText, page_size: 10 });
+          this.potentialCollaborators = (data.results || []).filter(
+              user => !this.alreadyCollaboratorIds.includes(user.id)
+          );
+        } catch (err) {
+          console.error("Failed to search users:", err);
+          this.addCollaboratorError = "Failed to fetch users.";
+          this.potentialCollaborators = [];
+        } finally {
+          this.isLoadingUsers = false;
+        }
+      }, 550);
+    },
+    methods: {
+      openAddDialog() {
+        this.selectedUserToAdd = null;
+        this.userSearchText = '';
+        this.potentialCollaborators = [];
+        this.addCollaboratorError = null;
+        this.showAddCollaboratorDialog = true;
+      },
+      closeAddDialog() {
+        this.showAddCollaboratorDialog = false;
+      },
+      async confirmAddCollaborator() {
+        if (!this.selectedUserToAdd || !this.selectedUserToAdd.id) return;
+  
+        if (this.alreadyCollaboratorIds.includes(this.selectedUserToAdd.id)) {
+            this.addCollaboratorError = `${this.selectedUserToAdd.username} is already a collaborator.`;
+            return;
+        }
+  
+        this.isAddingCollaborator = true;
+        this.addCollaboratorError = null;
+        try {
+          await addCollaborator(this.taskId, this.selectedUserToAdd.id);
+          this.displayedCollaborators.push(this.selectedUserToAdd);
+          this.$emit('collaborator-added', this.selectedUserToAdd);
+          this.closeAddDialog();
+        } catch (err) {
+          console.error("Failed to add collaborator:", err);
+          this.addCollaboratorError = err?.detail || err?.status || err?.warning || "Could not add collaborator.";
+          if (err?.warning) {
+              const alreadyAddedUser = this.potentialCollaborators.find(u => u.id === this.selectedUserToAdd.id);
+              if (alreadyAddedUser && !this.alreadyCollaboratorIds.includes(alreadyAddedUser.id)) {
+                  this.displayedCollaborators.push(alreadyAddedUser);
+              }
+          }
+        } finally {
+          this.isAddingCollaborator = false;
+        }
+      },
+      async handleRemoveCollaborator(userId) {
+        this.isRemovingCollaboratorId = userId;
+        this.error = null;
+        try {
+          await removeCollaborator(this.taskId, userId);
+          this.displayedCollaborators = this.displayedCollaborators.filter(c => c.id !== userId);
+          this.$emit('collaborator-removed', userId);
+        } catch (err) {
+          console.error("Failed to remove collaborator:", err);
+          this.error = err?.detail || err?.error || "Could not remove collaborator.";
+          this.$emit('error', this.error);
+        } finally {
+          this.isRemovingCollaboratorId = null;
+        }
+      }
     }
   };
-  
-  const handleRemoveCollaborator = async (userId) => {
-    isRemovingCollaboratorId.value = userId;
-    error.value = null;
-    try {
-      await removeCollaborator(props.taskId, userId);
-      displayedCollaborators.value = displayedCollaborators.value.filter(c => c.id !== userId);
-      emit('collaborator-removed', userId);
-    } catch (err) {
-      console.error("Failed to remove collaborator:", err);
-      error.value = err?.detail || err?.error || "Could not remove collaborator.";
-      emit('error', error.value);
-    } finally {
-      isRemovingCollaboratorId.value = null;
-    }
-  };
-  
   </script>
   
   <style lang="scss" scoped>
